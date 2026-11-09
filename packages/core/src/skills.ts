@@ -323,7 +323,7 @@ export const SPEAK_SKILL_ID = 'skill-speak';
 /** 세션 [재정리] 버튼이 쓰는 기본 스킬 */
 export const REORGANIZE_SKILL_ID = 'skill-reorganize';
 export const SCHEDULE_SKILL_ID = 'skill-schedule';
-/** 학습의 지식베이스(작업 폴더)를 탐색해 답하는 기본 스킬 (ADR-107) */
+/** 학습에 연결된 지식베이스(코드·문서)를 필요할 때만 KB 도구로 찾아 답하는 기본 스킬 (ADR-107, 지시는 ADR-137) */
 export const KNOWLEDGE_SKILL_ID = 'skill-knowledge';
 
 /** 커리큘럼 스킬 설명·지시 (호출 시점의 로케일) */
@@ -380,7 +380,7 @@ const sameContent = (s: Skill, c: BuiltinContent) =>
 /**
  * 기본 제공 스킬을 새 버전·지금 언어로 올린다. 사용자가 고치지 않은 것만 바꾼다:
  * - 예전 기본 커리큘럼 지시 그대로인 것
- * - 예전 기본 '지식베이스 탐색' 지시(작업 폴더 Glob/Grep/Read, 5개 언어) 그대로인 것 (ADR-131)
+ * - 예전 기본 '지식베이스 탐색' 지시(Glob/Grep/Read 버전 및 ADR-131 유형별 하이브리드 버전, 5개 언어) 그대로인 것 (ADR-137)
  * - 제목·설명·지시가 다른 언어의 기본 문구와 똑같은 것 (언어를 바꾸면 기본 스킬도 그 언어로)
  * 바뀐 스킬만 돌려준다.
  */

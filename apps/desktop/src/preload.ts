@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
-import type { BridgeServerMsg, DesktopApi, HostState, IndexIntegrityReport, KnowledgeAddResult, KnowledgeBase, KnowledgeCreateOptions, KnowledgeFolderInspection, KnowledgeKind, KnowledgeDoc, KnowledgeEntry, KnowledgeIndexSettings, KnowledgeIndexState, KnowledgePreview, KnowledgeProgress, KnowledgeSource, RetrievalRequest, RetrievalResult, SourceView, SkillFolder, SttModelId, SttState, SyncClientMsg, SyncServerMsg, UpdateState } from '@branch/core';
+import type { BridgeServerMsg, DesktopApi, GitImportMode, HostState, KnowledgeAddResult, KnowledgeBase, KnowledgeCreateOptions, KnowledgeEntry, KnowledgePreview, KnowledgeProgress, SkillFolder, SttModelId, SttState, SyncClientMsg, SyncServerMsg, UpdateState } from '@branch/core';
 import { CH } from './ipc';
 
 /** DesktopApi.sync with onPeerGone extension (ADR-026) */
@@ -144,8 +144,11 @@ const api: DesktopApiExt = {
       ipcRenderer.invoke(CH.knowledgePickFiles, id, dest) as Promise<KnowledgeAddResult>,
     addLink: (id: string, url: string) =>
       ipcRenderer.invoke(CH.knowledgeAddLink, id, url) as Promise<KnowledgeAddResult>,
-    cloneGit: (id: string, url: string) =>
-      ipcRenderer.invoke(CH.knowledgeCloneGit, id, url) as Promise<KnowledgeAddResult>,
+    // GitHub 가져오기 (ADR-138). mode 생략 = clone. zip = 압축 파일 받기
+    cloneGit: (id: string, url: string, opts?: { mode?: GitImportMode }) =>
+      ipcRenderer.invoke(CH.knowledgeCloneGit, id, url, opts) as Promise<KnowledgeAddResult>,
+    pullGit: (id: string, path: string) =>
+      ipcRenderer.invoke(CH.knowledgePullGit, id, path) as Promise<KnowledgeAddResult>,
     removeEntry: (id: string, path: string) => ipcRenderer.invoke(CH.knowledgeRemoveEntry, id, path) as Promise<void>,
     preview: (id: string, path: string) =>
       ipcRenderer.invoke(CH.knowledgePreview, id, path) as Promise<KnowledgePreview>,
@@ -159,43 +162,9 @@ const api: DesktopApiExt = {
       };
     },
     cancel: () => ipcRenderer.invoke(CH.knowledgeCancel) as Promise<void>,
-    // ── 색인·검색 (ADR-113). main은 id·설정을 검증하고 worker에 전달만 한다 ──
+    // 지식베이스 설명 (main이 길이를 확인한다)
     setDescription: (id: string, description: string) =>
       ipcRenderer.invoke(CH.knowledgeSetDescription, id, description) as Promise<KnowledgeBase>,
-    indexStates: (ids?: string[]) =>
-      ipcRenderer.invoke(CH.knowledgeIndexStates, ids) as Promise<KnowledgeIndexState[]>,
-    reindex: (id: string, opts?: { full?: boolean; paths?: string[]; retryFailed?: boolean }) =>
-      ipcRenderer.invoke(CH.knowledgeReindex, id, opts) as Promise<void>,
-    cancelIndex: (id: string) => ipcRenderer.invoke(CH.knowledgeCancelIndex, id) as Promise<void>,
-    docs: (id: string, query?: string) =>
-      ipcRenderer.invoke(CH.knowledgeDocs, id, query) as Promise<KnowledgeDoc[]>,
-    getIndexSettings: (id: string) =>
-      ipcRenderer.invoke(CH.knowledgeGetIndexSettings, id) as Promise<KnowledgeIndexSettings>,
-    setIndexSettings: (id: string, s: KnowledgeIndexSettings) =>
-      ipcRenderer.invoke(CH.knowledgeSetIndexSettings, id, s) as Promise<KnowledgeIndexState>,
-    setKind: (id: string, kind: KnowledgeKind) => ipcRenderer.invoke(CH.knowledgeSetKind, id, kind) as Promise<KnowledgeBase>,
-    setExcludes: (id: string, excludes: string[]) =>
-      ipcRenderer.invoke(CH.knowledgeSetExcludes, id, excludes) as Promise<KnowledgeBase>,
-    pickFolder: () => ipcRenderer.invoke(CH.knowledgePickFolder) as Promise<string | null>,
-    inspectFolder: (path: string) =>
-      ipcRenderer.invoke(CH.knowledgeInspectFolder, path) as Promise<KnowledgeFolderInspection>,
-    verifyIndex: (id: string) => ipcRenderer.invoke(CH.knowledgeVerifyIndex, id) as Promise<IndexIntegrityReport>,
-    restoreIndexBackup: (id: string) => ipcRenderer.invoke(CH.knowledgeRestoreIndexBackup, id) as Promise<boolean>,
-    sources: (id: string) => ipcRenderer.invoke(CH.knowledgeSources, id) as Promise<KnowledgeSource[]>,
-    updateSource: (id: string, sourceId: string) =>
-      ipcRenderer.invoke(CH.knowledgeUpdateSource, id, sourceId) as Promise<KnowledgeAddResult>,
-    retrieve: (req: RetrievalRequest, requestId?: string) =>
-      ipcRenderer.invoke(CH.knowledgeRetrieve, req, requestId) as Promise<RetrievalResult>,
-    cancelRetrieve: (requestId: string) => ipcRenderer.invoke(CH.knowledgeRetrieveCancel, requestId) as Promise<void>,
-    source: (kbId: string, chunkId: string) =>
-      ipcRenderer.invoke(CH.knowledgeSource, kbId, chunkId) as Promise<SourceView>,
-    onIndexState(listener: (s: KnowledgeIndexState) => void) {
-      const h = (_e: unknown, s: KnowledgeIndexState) => listener(s);
-      ipcRenderer.on(CH.knowledgeIndexState, h);
-      return () => {
-        ipcRenderer.removeListener(CH.knowledgeIndexState, h);
-      };
-    },
   },
   // 음성 입력 관리 (ADR-045). 전사 자체는 bridge 메시지로 한다
   stt: {

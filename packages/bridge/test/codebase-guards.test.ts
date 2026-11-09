@@ -4,10 +4,8 @@ import path from 'node:path';
 import { KbToolError } from '@branch/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { gitListArgs, gitListEnv } from '../src/codebase/listing';
-import { CODEBASE_LIMITS, grep, readCodebaseRange, type CodebaseTarget } from '../src/codebase';
+import { CODEBASE_LIMITS, CodebaseAbortError, grep, readCodebaseRange, type CodebaseTarget } from '../src/codebase';
 import { listDir, readText, resolveInside } from '../src/kbTools/files';
-import { keywordSearch } from '../src/kbTools/search';
-import { indexedSearch } from '../src/kbTools/indexSearch';
 
 /** T7 리뷰 수정 검증: git 인자(f), 첫 줄 과대(h), 긴 줄 검사 상한(i), 링크·경계(j), 취소 신호(g) */
 let root: string;
@@ -117,18 +115,9 @@ describe('대상 경계 (j)', () => {
 });
 
 describe('취소 신호 (g)', () => {
-  it('이미 취소된 신호로 키워드 검색을 시작하면 cancelled', async () => {
+  it('이미 취소된 신호로 파일 내용 검색(grep)을 시작하면 중지된다', async () => {
     const ac = new AbortController();
     ac.abort();
-    const kbs = [{ kbId: 'kbguard01', kbName: '가드', filesRoot: root }];
-    await expect(keywordSearch(kbs, 'inner', { limit: 5, signal: ac.signal })).rejects.toMatchObject({ code: 'cancelled' });
-  });
-
-  it('이미 취소된 신호로 색인 검색을 시작하면 cancelled', async () => {
-    const ac = new AbortController();
-    ac.abort();
-    await expect(indexedSearch(root, ['kbguard01'], { query: 'inner', limit: 5, signal: ac.signal })).rejects.toMatchObject({
-      code: 'cancelled',
-    });
+    await expect(grep(target, 'inner', { regex: false, limit: 5, signal: ac.signal })).rejects.toBeInstanceOf(CodebaseAbortError);
   });
 });

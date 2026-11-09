@@ -5,42 +5,38 @@ import { constants as fsc } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readFile, readdir, rename, rm, statfs, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { LinkBlockedError, pinnedGet } from './linkFetch';
-import { measureLinked, validateLinkedFolder } from './knowledgeFolder';
-import { filesRootOf, parseKindField } from './knowledgeMeta';
-import { hasIndexFiles, moveIndexFilesToBackup, restoreLatestIndexBackup } from './knowledgeBackup';
+import { measureLinked } from './knowledgeFolder';
+import { filesRootOf } from './knowledgeMeta';
+import { parseTarGz, TarFormatError } from './tarExtract';
 import {
-  DEFAULT_INDEX_SETTINGS,
-  NEW_DOCUMENT_INDEX_SETTINGS,
   KNOWLEDGE_ID_RE,
   KNOWLEDGE_LIMITS,
-  KnowledgePolicyError,
-  canChangeKind,
-  cleanExcludes,
   cleanKnowledgeName,
+  isGitImportMode,
   isKnowledgeId,
-  isKnowledgeKind,
-  isKnowledgeLinkUrl,
   isKnowledgePath,
+  isKnowledgeLinkUrl,
   newId,
   parseGitHubRepo,
   parseGitProgress,
   t,
+  type GitImportMode,
   type KnowledgeAddResult,
   type KnowledgeBase,
   type KnowledgeCreateOptions,
   type KnowledgeEntry,
-  type KnowledgeKind,
-  type KnowledgeKindSuggestion,
   type KnowledgePreview,
-  type KnowledgeIndexSettings,
   type KnowledgeProgress,
   type KnowledgeSource,
+  type MessageKey,
 } from '@branch/core';
 
 /**
- * 학습별 지식베이스 파일 저장소 `<root>/<id>/` (ADR-107).
+ * 학습별 지식베이스 파일 저장소 `<root>/<id>/` (ADR-107, ADR-136).
  * 구조: `<root>/<id>/meta.json`, `<root>/<id>/files/` (사용자가 보는 트리 전체).
- * files/ 안에 links/(웹 페이지 마크다운), repos/<repo>/(GitHub 클론)이 놓인다.
+ * files/ 안에 links/(웹 페이지 마크다운), repos/<repo>/(GitHub 클론·ZIP)이 놓인다.
+ * 지식베이스 유형과 벡터 색인은 없다. 모든 지식베이스는 폴더를 Agentic 도구로 탐색한다.
+ * 구버전 연결 폴더(linkedPath)는 읽기 전용으로 탐색만 한다.
  * 렌더러가 보낸 값은 믿지 않는다: id·상대 경로·이름·크기를 여기서 다시 확인하고,
  * 모든 경로 조각을 lstat으로 확인해 심볼릭 링크는 따라가지도, 쓰지도 않는다.
  * 숨김 항목(`.`으로 시작)과 .git은 목록·복사에서 건너뛴다. 파일 내용은 로그에 남기지 않는다.
@@ -56,10 +52,18 @@ const WIN_BAD_CHARS_RE = /[<>:"|?*\\/]|[\u0000-\u001f]/;
 
 /** 링크 본문 최대 크기 (바이트) */
 const HTML_MAX_BYTES = 5 * 1024 * 1024;
-/** 링크 가져오기 제한 시간 */
+/** 링크·압축 파일 가져오기 제한 시간 */
 const FETCH_TIMEOUT_MS = 15_000;
+/** ZIP(tar.gz) 내려받기 제한 시간 (큰 저장소를 고려해 길게) */
+const ARCHIVE_TIMEOUT_MS = 5 * 60_000;
+/** ZIP(tar.gz) 내려받기 최대 크기 (압축된 상태) */
+const ARCHIVE_MAX_BYTES = 200 * 1024 * 1024;
+/** ZIP을 풀 때 항목 수 상한 (디렉터리 포함) */
+const ARCHIVE_MAX_ENTRIES = 50_000;
 /** 클론 전체 제한 시간 (진행 중이어도 이 시간을 넘으면 멈춘다) */
 const CLONE_TIMEOUT_MS = 10 * 60_000;
+/** 클론 중 임시 폴더 크기를 재는 간격 */
+const CLONE_WATCH_MS = 2_000;
 /** 클론이 이 시간 동안 아무 출력이 없으면 멈춘 것으로 본다 */
 const CLONE_IDLE_MS = 60_000;
 /** 클론 종료 후 stderr가 닫히길 기다리는 최대 시간 (손자 프로세스가 붙잡고 있을 수 있다) */
@@ -68,13 +72,18 @@ const CLONE_CLOSE_GRACE_MS = 500;
 const WALK_MAX_ENTRIES = 20_000;
 /** 미리보기로 읽을 최대 바이트 (문자 수 * 4) */
 const PREVIEW_READ_BYTES = KNOWLEDGE_LIMITS.previewChars * 4;
+/** 추가·클론 전에 남아 있어야 하는 여유 공간 */
+const MIN_FREE_FOR_ADD = 100 * 1024 * 1024;
+/** 링크 리디렉션 최대 횟수 */
+const MAX_REDIRECTS = 5;
+/** 설명 최대 길이 */
+const DESCRIPTION_MAX = 500;
 
 /** 이 모듈에서 쓰는 오류 (메시지는 한국어로 렌더러에 그대로 보인다) */
 function fail(message: string): never {
   throw new Error(message);
 }
 
-/** 지식베이스가 없을 때의 오류 (채팅은 이 경우 지식베이스 없이 답한다) */
 /** 두 신호 중 하나라도 중단되면 중단되는 신호를 만든다 (AbortSignal.any 대체: 대상 lib에 없음) */
 function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   const c = new AbortController();
@@ -87,6 +96,7 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   return c.signal;
 }
 
+/** 지식베이스가 없을 때의 오류 (채팅은 이 경우 지식베이스 없이 답한다) */
 export class KnowledgeNotFoundError extends Error {}
 
 /** 경로 조각 하나가 안전한지: 빈 값·점·숨김·Windows 예약 이름·금지 문자 금지 */
@@ -235,24 +245,27 @@ export function htmlToMarkdown(html: string): string {
     .trim();
 }
 
-/** 얕은 클론 인자 (shell 없이 spawn한다). 심볼릭 링크는 파일로 풀어 따라가지 못하게 한다 */
+/** 얕은 클론 공통 git 하드닝 (ADR-138): 심볼릭 링크를 만들지 않고, 자격 증명 도우미·훅·fsmonitor를 쓰지 않는다 */
+export const GIT_HARDEN_ARGS: readonly string[] = [
+  '-c',
+  'core.symlinks=false',
+  // 자격 증명 도우미(키체인·GCM 창)를 부르지 않는다: 공개 저장소만 받는다
+  '-c',
+  'credential.helper=',
+  '-c',
+  'core.hooksPath=/dev/null',
+  '-c',
+  'core.fsmonitor=false',
+];
+
+/** 얕은 클론 인자 (shell 없이 spawn한다). .git은 남겨 두어 나중에 pull할 수 있게 한다 (ADR-138) */
 export function gitCloneArgs(url: string, dest: string): string[] {
-  return [
-    '-c',
-    'core.symlinks=false',
-    // 자격 증명 도우미(키체인·GCM 창)를 부르지 않는다: 공개 저장소만 받는다
-    '-c',
-    'credential.helper=',
-    'clone',
-    '--depth',
-    '1',
-    '--single-branch',
-    '--no-tags',
-    '--progress',
-    '--',
-    url,
-    dest,
-  ];
+  return [...GIT_HARDEN_ARGS, 'clone', '--depth', '1', '--single-branch', '--no-tags', '--progress', '--', url, dest];
+}
+
+/** 얕은 클론 갱신 인자: 빨리 감기만 허용한다 (ADR-138) */
+export function gitPullArgs(): string[] {
+  return [...GIT_HARDEN_ARGS, 'pull', '--ff-only', '--depth', '1'];
 }
 
 /** 가져오기 진행 알림·취소 (main이 렌더러 창마다 하나씩 만든다) */
@@ -273,7 +286,7 @@ export function gitErrorLine(messages: string[], code: number | null): string {
 export interface KnowledgeStoreOptions {
   /** 지식베이스 루트 폴더 (`<userData>/knowledge`) */
   root: string;
-  /** 링크 가져오기용 fetch (테스트에서 바꾼다) */
+  /** 링크·ZIP 가져오기용 fetch (테스트에서 바꾼다) */
   fetch?: typeof fetch;
   /** git 실행 환경 (PATH 등). 기본은 process.env */
   env?: NodeJS.ProcessEnv;
@@ -287,11 +300,8 @@ export interface KnowledgeStoreOptions {
   /** 클론 무응답·전체 제한 시간 (테스트용) */
   cloneIdleMs?: number;
   cloneTimeoutMs?: number;
-  /**
-   * 색인 연결을 먼저 닫는다 (코드베이스로 바꾸기 전 색인 파일을 옮기기 위해). 진행 중 작업 취소·대기는 호출 쪽 책임.
-   * 기본은 아무것도 하지 않는다.
-   */
-  releaseIndex?: (kbId: string) => Promise<void>;
+  /** 클론 중 임시 폴더 크기를 재는 간격 (테스트용, 기본 2초) */
+  cloneWatchMs?: number;
 }
 
 /** 링크 응답 한 개 (주입 fetch와 연결 검사 요청을 같은 모양으로 맞춘다) */
@@ -305,37 +315,20 @@ interface LinkPage {
 const dnsLookupAll = async (hostname: string): Promise<string[]> =>
   (await dnsLookup(hostname, { all: true, verbatim: true })).map((a) => a.address);
 
-/** 링크 리디렉션 최대 횟수 */
-const MAX_REDIRECTS = 5;
-
 export interface KnowledgeStore {
   /** 지식베이스 목록. 파일을 훑지 않는다 — 개수·크기 캐시가 없으면 statsPending으로 돌려주고 뒤에서 잰다 (ADR-126) */
   list(): Promise<KnowledgeBase[]>;
   /** 개수·크기 캐시가 없는 지식베이스를 미리 잰다 (앱 시작 뒤 한가할 때). 하나씩, 끝나면 resolve */
   warmStats(): Promise<void>;
-  /** 새 지식베이스. 옵션을 생략하면 문서형. 코드베이스는 linkedPath로 로컬 폴더를 읽기 전용 연결할 수 있다 (ADR-128) */
+  /** 새 지식베이스 (유형 없음, ADR-136) */
   create(name: string, opts?: KnowledgeCreateOptions): Promise<KnowledgeBase>;
-  /**
-   * 유형 지정·변경. 연결 폴더 코드베이스는 문서형이 될 수 없다. 색인 파일 옮기기·작업 취소는 호출 쪽이 먼저 한다.
-   * migratedFrom은 자동 마이그레이션이 적용했을 때만 넘긴다 (ADR-132).
-   */
-  setKind(id: string, kind: KnowledgeKind, migratedFrom?: KbMigrationRecord): Promise<KnowledgeBase>;
-  /** 미분류 KB의 유형 추정 저장 (자동 적용하지 않는다). null이면 지운다 */
-  setKindSuggestion(id: string, suggestion: KnowledgeKindSuggestion | null): Promise<KnowledgeBase>;
-  /**
-   * 백업 폴더(backup/<ts>/)의 가장 최근 색인 파일을 되돌린다. 현재 색인이 있으면 false (덮어쓰지 않는다).
-   * 코드베이스 KB는 색인을 갖지 않으므로 항상 false.
-   */
-  restoreIndexBackup(id: string): Promise<boolean>;
-  /** 코드베이스 제외 경로 저장 (코드베이스만) */
-  setExcludes(id: string, excludes: string[]): Promise<KnowledgeBase>;
   rename(id: string, name: string): Promise<KnowledgeBase>;
   remove(id: string): Promise<void>;
   /**
-   * 항목 목록. dir을 주면 그 폴더의 바로 아래 항목만 ('' = 최상위, 폴더를 펼칠 때 하나씩 읽는다).
-   * dir이 없으면 files/ 아래 전체를 재귀로 읽는다 (최대 WALK_MAX_ENTRIES).
+   * 폴더 한 단계의 항목 (ADR-139). dir은 필수이며 '' = 최상위.
+   * 바로 아래 항목만 읽고(폴더 먼저, 이름순), 출처 기록과 맞는 항목에는 source를 붙인다.
    */
-  tree(id: string, dir?: string): Promise<KnowledgeEntry[]>;
+  tree(id: string, dir: string): Promise<KnowledgeEntry[]>;
   addPaths(id: string, paths: string[], dest?: string, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
   addFiles(
     id: string,
@@ -344,66 +337,34 @@ export interface KnowledgeStore {
     ctl?: KnowledgeTaskControl,
   ): Promise<KnowledgeAddResult>;
   addLink(id: string, url: string, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
-  cloneGit(id: string, url: string, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
+  /** GitHub 가져오기 (ADR-138). clone = .git 유지(pull 가능), zip = tar.gz 내려받아 풀기 (기본 clone) */
+  cloneGit(id: string, url: string, opts?: { mode?: GitImportMode }, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
+  /** clone으로 가져온 저장소를 빨리 감기로 갱신한다 (ADR-138). 다른 방식이면 throw */
+  pullGit(id: string, relPath: string, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
+  /** 항목(파일·폴더)을 지우고, 그 아래를 가리키던 출처 기록도 지운다 */
   removeEntry(id: string, relPath: string): Promise<void>;
   preview(id: string, relPath: string): Promise<KnowledgePreview>;
-  /** 지식베이스 폴더(files/) 절대 경로. 답변 CLI의 작업 폴더로 쓴다 */
+  /** 지식베이스 폴더 절대 경로 (연결 폴더면 그 폴더, 아니면 files/). 답변 CLI의 작업 폴더로 쓴다 */
   dirFor(id: string): string;
-  /**
-   * 답변용 폴더 개요 (ADR-119): 얕은 층부터 너비 우선으로 최대 indexPaths개, 깊이 OUTLINE_DEPTH까지.
-   * 폴더는 끝에 '/'를 붙인다. 파일 크기는 읽지 않아 큰 저장소에서도 빠르다. truncated면 다 담지 못했다.
-   */
-  index(id: string): Promise<{ paths: string[]; truncated: boolean }>;
   /** 경로(files/ 기준)를 절대 경로로 바꾼다. 항목이 없거나 링크면 throw */
   resolvePath(id: string, relPath: string): Promise<string>;
   /** 설명 저장 (빈 문자열이면 지운다) */
   setDescription(id: string, description: string): Promise<KnowledgeBase>;
-  /** 색인 설정 (저장된 값이 없으면 기본값) */
-  getSettings(id: string): Promise<KnowledgeIndexSettings>;
-  setSettings(id: string, settings: KnowledgeIndexSettings): Promise<KnowledgeIndexSettings>;
   /** 출처 목록 (추가할 때 기록된 원본 위치) */
   sources(id: string): Promise<KnowledgeSource[]>;
-  /** 출처를 원본에서 다시 가져와 files/ 안의 같은 자리를 교체한다 */
-  updateSource(id: string, sourceId: string, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult>;
 }
 
-/** 메타 파일(meta.json) 내용. 선택 필드는 없을 수 있다 */
+/** 메타 파일(meta.json) 내용. 선택 필드는 없을 수 있다. 구버전 필드(kind 등)는 읽지 않는다 */
 interface KbMeta {
   name: string;
   createdAt: number;
   updatedAt: number;
   description?: string;
-  settings?: KnowledgeIndexSettings;
   sources?: KnowledgeSource[];
   /** 파일 수·크기 합 캐시. 목록을 열 때 전체를 훑지 않게 변경 작업 뒤에 다시 잰다 */
   stats?: KbStats;
-  /** 유형 (ADR-127). 없으면 미분류 */
-  kind?: KnowledgeKind;
-  /** 연결 폴더 절대 경로 (코드베이스 전용, ADR-128) */
+  /** 연결 폴더 절대 경로 (구버전 코드베이스 KB, 읽기 전용, ADR-136) */
   linkedPath?: string;
-  /** 코드베이스 제외 패턴 */
-  excludes?: string[];
-  kindSuggestion?: KnowledgeKindSuggestion;
-  migratedFrom?: KbMigrationRecord;
-}
-
-/** 자동 마이그레이션 기록 (ADR-132). 어떤 버전·근거로 유형이 정해졌는지 남긴다 */
-export interface KbMigrationRecord {
-  version: string;
-  at: number;
-  reason: string;
-}
-
-function parseMigrated(v: unknown): KbMigrationRecord | undefined {
-  const o = v as Partial<KbMigrationRecord> | null | undefined;
-  if (!o || typeof o.version !== 'string' || typeof o.at !== 'number' || typeof o.reason !== 'string') return undefined;
-  return { version: o.version, at: o.at, reason: o.reason };
-}
-
-function parseSuggestion(v: unknown): KnowledgeKindSuggestion | undefined {
-  const o = v as Partial<KnowledgeKindSuggestion> | null | undefined;
-  if (!o || !isKnowledgeKind(o.kind) || typeof o.reason !== 'string') return undefined;
-  return { kind: o.kind, reason: o.reason };
 }
 
 interface KbStats {
@@ -416,37 +377,26 @@ function isStats(v: unknown): v is KbStats {
   return !!o && Number.isFinite(o.fileCount) && Number.isFinite(o.totalBytes);
 }
 
-const DESCRIPTION_MAX = 500;
-/** 추가·클론 전에 남아 있어야 하는 여유 공간 */
-const MIN_FREE_FOR_ADD = 100 * 1024 * 1024;
-
-function isIndexSettings(v: unknown): v is KnowledgeIndexSettings {
-  const e = (v as { embedding?: { provider?: unknown; model?: unknown; dimensions?: unknown } } | null | undefined)
-    ?.embedding;
-  const auto = (v as { autoIndex?: unknown } | null | undefined)?.autoIndex;
-  return (
-    !!e &&
-    (e.provider === 'none' || e.provider === 'local-hash' || e.provider === 'openai') &&
-    (e.model === undefined || typeof e.model === 'string') &&
-    (e.dimensions === undefined || (Number.isInteger(e.dimensions) && (e.dimensions as number) > 0)) &&
-    (auto === undefined || typeof auto === 'boolean')
-  );
-}
-
 function parseSources(v: unknown): KnowledgeSource[] {
   if (!Array.isArray(v)) return [];
-  return v.filter((s): s is KnowledgeSource => {
-    const o = s as Partial<KnowledgeSource> | null;
-    return (
-      !!o &&
-      typeof o.id === 'string' &&
-      typeof o.type === 'string' &&
-      typeof o.location === 'string' &&
-      typeof o.dest === 'string' &&
-      typeof o.addedAt === 'number' &&
-      typeof o.updatedAt === 'number'
-    );
-  });
+  return v
+    .filter((s): s is KnowledgeSource => {
+      const o = s as Partial<KnowledgeSource> | null;
+      return (
+        !!o &&
+        typeof o.id === 'string' &&
+        typeof o.type === 'string' &&
+        typeof o.location === 'string' &&
+        typeof o.dest === 'string' &&
+        typeof o.addedAt === 'number' &&
+        typeof o.updatedAt === 'number'
+      );
+    })
+    .map((s) => {
+      // mode는 github 출처에만 의미가 있다. 없거나 잘못되면 생략한다 (구버전 행)
+      const { mode, ...rest } = s;
+      return isGitImportMode(mode) ? { ...rest, mode } : rest;
+    });
 }
 
 interface Budget {
@@ -460,7 +410,7 @@ interface Budget {
   ctl?: KnowledgeTaskControl;
 }
 
-/** 디렉터리를 재귀로 훑어 항목을 모은다 (숨김·링크 제외) */
+/** 디렉터리를 재귀로 훑어 항목을 모은다 (숨김·링크 제외). 크기 재기 전용 */
 async function walk(dirAbs: string, prefix: string, out: KnowledgeEntry[], budget: { n: number }): Promise<void> {
   let names: import('node:fs').Dirent[];
   try {
@@ -485,7 +435,7 @@ async function walk(dirAbs: string, prefix: string, out: KnowledgeEntry[], budge
   }
 }
 
-/** 폴더 하나의 바로 아래 항목 (숨김·링크 제외, 이름순). 폴더를 펼칠 때 읽는다 */
+/** 폴더 하나의 바로 아래 항목 (숨김·링크 제외, 폴더 먼저, 이름순). 폴더를 펼칠 때 하나씩 읽는다 */
 async function listLevel(dirAbs: string, prefix: string): Promise<KnowledgeEntry[]> {
   let names: import('node:fs').Dirent[];
   try {
@@ -493,47 +443,20 @@ async function listLevel(dirAbs: string, prefix: string): Promise<KnowledgeEntry
   } catch {
     return [];
   }
-  names.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const byName = (a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const dirs = names.filter((d) => d.isDirectory() && !isHidden(d.name)).sort(byName);
+  const files = names.filter((d) => d.isFile() && !isHidden(d.name)).sort(byName);
   const out: KnowledgeEntry[] = [];
-  for (const d of names) {
-    if (isHidden(d.name) || d.isSymbolicLink() || out.length >= WALK_MAX_ENTRIES) continue;
+  for (const d of dirs) {
+    if (out.length >= WALK_MAX_ENTRIES) break;
+    out.push({ path: prefix ? `${prefix}/${d.name}` : d.name, dir: true });
+  }
+  for (const d of files) {
+    if (out.length >= WALK_MAX_ENTRIES) break;
     const rel = prefix ? `${prefix}/${d.name}` : d.name;
-    if (d.isDirectory()) out.push({ path: rel, dir: true });
-    else if (d.isFile()) out.push({ path: rel, dir: false, size: (await lstatOrNull(path.join(dirAbs, d.name)))?.size ?? 0 });
+    out.push({ path: rel, dir: false, size: (await lstatOrNull(path.join(dirAbs, d.name)))?.size ?? 0 });
   }
   return out;
-}
-
-/** index()가 내려가는 최대 깊이 (1 = 최상위 항목만) */
-export const OUTLINE_DEPTH = 3;
-
-/** 너비 우선 폴더 개요: 상위 층을 먼저 채우고 limit개에서 멈춘다 (숨김·링크 제외, lstat 없음) */
-export async function outline(root: string, limit: number): Promise<{ paths: string[]; truncated: boolean }> {
-  const paths: string[] = [];
-  let level: string[] = [''];
-  for (let depth = 1; depth <= OUTLINE_DEPTH && level.length > 0; depth++) {
-    const next: string[] = [];
-    for (const rel of level) {
-      let names: import('node:fs').Dirent[];
-      try {
-        names = await readdir(rel ? path.join(root, rel) : root, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-      names.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-      for (const d of names) {
-        if (isHidden(d.name) || d.isSymbolicLink()) continue;
-        const child = rel ? `${rel}/${d.name}` : d.name;
-        if (!d.isDirectory() && !d.isFile()) continue;
-        if (paths.length >= limit) return { paths, truncated: true };
-        paths.push(d.isDirectory() ? `${child}/` : child);
-        if (d.isDirectory()) next.push(child);
-      }
-    }
-    level = next;
-  }
-  // 마지막 층 아래에 더 있으면 잘린 것으로 본다 (폴더만 있고 내용은 안 봤다)
-  return { paths, truncated: level.length > 0 };
 }
 
 /** 크기·개수 합계 (files/ 기준) */
@@ -551,6 +474,62 @@ async function measure(dirAbs: string): Promise<{ fileCount: number; totalBytes:
   return { fileCount, totalBytes };
 }
 
+/**
+ * 폴더의 실제 디스크 사용량(숨김·.git 포함, 항목 수 제한 없음). cap을 넘으면 그 즉시 멈추고 cap+1 이상을 돌려준다.
+ * 가져오기 한도 확인 전용이다 (measure는 표시용이라 숨김을 빼고 20k에서 멈춘다).
+ */
+async function diskUsage(dirAbs: string, cap: number): Promise<number> {
+  let total = 0;
+  const stack = [dirAbs];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let names: import('node:fs').Dirent[];
+    try {
+      names = await readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const d of names) {
+      const abs = path.join(dir, d.name);
+      if (d.isSymbolicLink()) continue;
+      if (d.isDirectory()) stack.push(abs);
+      else if (d.isFile()) {
+        total += (await lstatOrNull(abs))?.size ?? 0;
+        if (total > cap) return total;
+      }
+    }
+  }
+  return total;
+}
+
+/**
+ * 구버전 색인 파일(`index*.sqlite*`)과 백업 폴더(`backup/`)를 각 지식베이스 폴더 바로 아래에서 지운다 (ADR-136).
+ * 파생 데이터이므로 원본인 files/는 건드리지 않는다. 여러 번 실행해도 안전하다(멱등). 앱 시작 때 부른다.
+ * 반환값은 지운 항목 수.
+ */
+export async function cleanLegacyIndexes(root: string): Promise<number> {
+  let removed = 0;
+  let ids: string[];
+  try {
+    ids = (await readdir(path.resolve(root))).filter((n) => KNOWLEDGE_ID_RE.test(n));
+  } catch {
+    return 0;
+  }
+  for (const id of ids) {
+    const dir = path.join(path.resolve(root), id);
+    if (!(await lstatOrNull(dir))?.isDirectory()) continue;
+    const names = await readdir(dir).catch(() => [] as string[]);
+    for (const name of names) {
+      // 꺼지면서 남은 클론·압축 임시 폴더도 지운다 (앱 시작 때만 불리므로 진행 중인 작업이 없다)
+      if (name === 'backup' || /^index.*\.sqlite/.test(name) || /^\.(clone|zip)-[0-9a-f]{12}$/.test(name)) {
+        await rm(path.join(dir, name), { recursive: true, force: true }).catch(() => undefined);
+        removed++;
+      }
+    }
+  }
+  return removed;
+}
+
 export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStore {
   const root = path.resolve(opts.root);
   /** 지식베이스 폴더를 품거나 그 안에 있는 경로 (자기 자신으로 복사해 끝없이 커지는 것을 막는다) */
@@ -564,6 +543,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
   const gitBin = opts.gitBin ?? 'git';
   const cloneIdleMs = opts.cloneIdleMs ?? CLONE_IDLE_MS;
   const cloneTimeoutMs = opts.cloneTimeoutMs ?? CLONE_TIMEOUT_MS;
+  const cloneWatchMs = opts.cloneWatchMs ?? CLONE_WATCH_MS;
 
   // 변경 작업은 하나씩 (같은 지식베이스에 동시에 쓰지 않게)
   let chain: Promise<unknown> = Promise.resolve();
@@ -577,25 +557,16 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
   const filesDir = (id: string) => path.join(kbDir(id), 'files');
   const metaPath = (id: string) => path.join(kbDir(id), 'meta.json');
 
+  /** 메타를 읽는다. 필수 필드가 없거나 깨졌으면 null (fail closed) */
   async function readMeta(id: string): Promise<KbMeta | null> {
     try {
       const raw = JSON.parse(await readFile(metaPath(id), 'utf8')) as Record<string, unknown>;
       if (typeof raw.name !== 'string' || typeof raw.createdAt !== 'number' || typeof raw.updatedAt !== 'number') return null;
       const meta: KbMeta = { name: raw.name, createdAt: raw.createdAt, updatedAt: raw.updatedAt };
       if (typeof raw.description === 'string' && raw.description) meta.description = raw.description;
-      if (isIndexSettings(raw.settings)) meta.settings = raw.settings;
       if (raw.sources !== undefined) meta.sources = parseSources(raw.sources);
       if (isStats(raw.stats)) meta.stats = { fileCount: raw.stats.fileCount, totalBytes: raw.stats.totalBytes };
-      // kind가 있는데 알 수 없는 값이면 메타 전체를 읽을 수 없는 것으로 본다 (fail closed)
-      const kind = parseKindField(raw.kind);
-      if (kind === 'invalid') return null;
-      if (kind) meta.kind = kind;
-      if (meta.kind === 'codebase' && typeof raw.linkedPath === 'string' && path.isAbsolute(raw.linkedPath)) meta.linkedPath = raw.linkedPath;
-      if (raw.excludes !== undefined) meta.excludes = cleanExcludes(raw.excludes);
-      const sug = parseSuggestion(raw.kindSuggestion);
-      if (sug) meta.kindSuggestion = sug;
-      const mig = parseMigrated(raw.migratedFrom);
-      if (mig) meta.migratedFrom = mig;
+      if (typeof raw.linkedPath === 'string' && path.isAbsolute(raw.linkedPath)) meta.linkedPath = raw.linkedPath;
       return meta;
     } catch {
       return null;
@@ -610,12 +581,10 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
     return meta;
   }
 
-  /** 파일을 바꾸는 작업 전 확인: 연결 폴더 코드베이스는 읽기 전용이다 (ADR-128) */
+  /** 파일을 바꾸는 작업 전 확인: 연결 폴더(구버전)는 읽기 전용이다 (ADR-136) */
   async function writableKb(id: string): Promise<KbMeta> {
     const meta = await existingKb(id);
-    if (meta.linkedPath) {
-      throw new KnowledgePolicyError('linked_kind_locked', 'linked codebase knowledge base is read-only');
-    }
+    if (meta.linkedPath) fail(t('bridge.knowledge.linkedReadOnly'));
     return meta;
   }
 
@@ -646,18 +615,13 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
     return p.catch(() => undefined);
   }
 
-  /** 원본 루트: 연결 폴더면 그 폴더, 아니면 files/ */
+  /** 원본 루트: 연결 폴더(구버전)면 그 폴더, 아니면 files/ */
   const baseOf = (id: string, meta: KbMeta): string => (meta.linkedPath ? meta.linkedPath : filesDir(id));
 
-  /** 개수·크기: 연결 폴더는 제외 규칙을 따라 세고, 아니면 files/ 전체 */
+  /** 개수·크기: 연결 폴더는 세고, 아니면 files/ 전체 */
   async function measureKb(id: string, meta: KbMeta): Promise<{ fileCount: number; totalBytes: number }> {
-    if (meta.linkedPath) return measureLinked(meta.linkedPath, meta.excludes ?? []);
+    if (meta.linkedPath) return measureLinked(meta.linkedPath, []);
     return measure(filesDir(id));
-  }
-
-  /** 파일이 바뀐 뒤 크기·개수를 다시 재서 메타에 담는다 (serial 안에서 부른다) */
-  async function withStats(id: string, meta: KbMeta): Promise<KbMeta> {
-    return { ...meta, stats: await measureKb(id, meta) };
   }
 
   /** 메타만으로 만든다 — 파일을 훑지 않는다. 캐시가 없으면 statsPending으로 돌려주고 뒤에서 잰다 */
@@ -673,10 +637,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       fileCount: m?.fileCount ?? 0,
       totalBytes: m?.totalBytes ?? 0,
       ...(m ? {} : { statsPending: true }),
-      ...(meta.kind ? { kind: meta.kind } : {}),
       ...(meta.linkedPath ? { linkedPath: meta.linkedPath } : {}),
-      ...(meta.kind === 'codebase' ? { excludes: meta.excludes ?? [] } : {}),
-      ...(meta.kind === undefined && meta.kindSuggestion ? { kindSuggestion: meta.kindSuggestion } : {}),
     };
   }
 
@@ -693,7 +654,10 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
   }
 
   /** 새로 추가된 항목을 출처 목록에 기록한다 */
-  async function recordSources(id: string, rows: { type: KnowledgeSource['type']; location: string; dest: string }[]) {
+  async function recordSources(
+    id: string,
+    rows: { type: KnowledgeSource['type']; location: string; dest: string; mode?: GitImportMode }[],
+  ) {
     if (rows.length === 0) return;
     const meta = await readMeta(id);
     if (!meta) return;
@@ -705,6 +669,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       dest: r.dest,
       addedAt: now,
       updatedAt: now,
+      ...(r.mode ? { mode: r.mode } : {}),
     }));
     await saveMeta(id, { ...meta, sources: [...(meta.sources ?? []), ...added] });
   }
@@ -844,11 +809,39 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
     if (b.bytes + adding.bytes > KNOWLEDGE_LIMITS.totalBytes) fail(t('bridge.knowledge.tooManyBytes'));
   }
 
-  /** 디스크에서 클론한 임시 폴더가 지식베이스 한도 안인지 */
+  /** 디스크에서 가져온 임시 폴더가 지식베이스 한도 안인지 */
   async function assertCloneFits(id: string, dirAbs: string) {
-    const added = await measure(dirAbs);
-    const cur = await measure(filesDir(id));
-    checkBudget({ files: cur.fileCount, bytes: cur.totalBytes }, { files: added.fileCount, bytes: added.totalBytes });
+    // 표시용 measure와 달리 .git·숨김 파일까지 모두 센다 (실제 디스크 사용량 기준)
+    const cap = KNOWLEDGE_LIMITS.totalBytes;
+    const added = await diskUsage(dirAbs, cap);
+    const cur = added > cap ? 0 : await diskUsage(filesDir(id), cap);
+    checkBudget({ files: 0, bytes: cur }, { files: 0, bytes: added });
+  }
+
+  /** 지식베이스에 남은 용량 (클론 중 감시용) */
+  async function roomLeft(id: string): Promise<number> {
+    const cap = KNOWLEDGE_LIMITS.totalBytes;
+    return Math.max(0, cap - (await diskUsage(filesDir(id), cap)));
+  }
+
+  /** 가져온 폴더를 제자리로 옮기고 출처를 기록한다. 기록이 실패하면 옮긴 폴더를 지워 고아 폴더를 남기지 않는다 */
+  async function placeImported(
+    id: string,
+    tmp: string,
+    name: string,
+    source: { location: string; mode: GitImportMode },
+  ): Promise<string> {
+    const reposDir = await ensureDir(id, 'repos');
+    const target = path.join(reposDir, await uniqueName(reposDir, name));
+    await rename(tmp, target);
+    const rel = relOf(id, target);
+    try {
+      await recordSources(id, [{ type: 'github', location: source.location, dest: rel, mode: source.mode }]);
+    } catch (err) {
+      await rm(target, { recursive: true, force: true }).catch(() => undefined);
+      throw err;
+    }
+    return rel;
   }
 
   async function removeSymlinks(dirAbs: string) {
@@ -883,7 +876,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
    * git을 실행한다. stderr의 진행 줄을 진행률로 알리고, 무응답·전체 시간 초과·취소 시 프로세스 트리를 끝낸다.
    * 'close'(stdio 닫힘)만 기다리면 손자 프로세스가 파이프를 붙잡아 영원히 끝나지 않을 수 있어 'exit'로 끝낸다.
    */
-  function runGit(args: string[], cwd: string, ctl?: KnowledgeTaskControl): Promise<void> {
+  function runGit(args: string[], cwd: string, ctl: KnowledgeTaskControl | undefined, phase: KnowledgeProgress['phase']): Promise<void> {
     return new Promise((resolve, reject) => {
       const signal = ctl?.signal;
       if (signal?.aborted) return reject(cancelledError());
@@ -899,6 +892,8 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
           stdio: ['ignore', 'ignore', 'pipe'],
           env: {
             ...gitEnv,
+            // 시스템 전역 git 설정을 읽지 않는다 (사용자 설정 파일은 그대로 둔다)
+            GIT_CONFIG_NOSYSTEM: '1',
             GIT_TERMINAL_PROMPT: '0',
             GCM_INTERACTIVE: 'never',
             GIT_ASKPASS: '',
@@ -919,7 +914,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
         if (ratio === null) {
           if (messages.length < 20) messages.push(line);
         } else {
-          ctl?.onProgress?.({ phase: 'clone', ratio });
+          ctl?.onProgress?.({ phase, ratio });
         }
       };
       const settle = (err?: Error) => {
@@ -978,10 +973,19 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
     });
   }
 
-  /** 링크 한 개를 가져온다 (네트워크, 큐 밖에서 실행). 마크다운 본문을 돌려준다 */
-  async function fetchPage(url: string, outer?: AbortSignal): Promise<{ title: string; markdown: string; finalUrl: string }> {
-    if (!isKnowledgeLinkUrl(url)) fail(t('bridge.knowledge.badUrl'));
-    const first = new URL(url.trim());
+  /**
+   * 공개 주소 하나를 받는다 (SSRF 방지). 리디렉션은 직접 따라가며 매 단계 주소를 확인한다.
+   * 주입된 fetch가 있으면 그것을 쓰고, 없으면 연결 직전에도 주소를 다시 검사한다 (DNS 리바인딩 방지).
+   * 응답 본문은 maxBytes를 넘으면 tooLarge 메시지로 실패한다.
+   */
+  async function httpGet(
+    start: URL,
+    outer: AbortSignal | undefined,
+    headers: Record<string, string>,
+    maxBytes: number,
+    timeoutMs: number,
+    tooLarge: MessageKey,
+  ): Promise<{ status: number; headers: Headers; url: string; body: Uint8Array }> {
     const hostAddrs = (hostname: string) => lookupAll(hostname.replace(/^\[|\]$/g, ''));
     /** 호스트가 사설 주소이거나 사설 주소로 풀리면 막는다 (요청 전 검사) */
     const assertPublic = async (u: URL) => {
@@ -996,13 +1000,8 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       }
       if (addrs.some((a) => isPrivateHost(a))) fail(t('bridge.knowledge.privateHost'));
     };
-    const headers = { accept: 'text/html,application/xhtml+xml,text/plain;q=0.8' };
-    const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    const timeout = AbortSignal.timeout(timeoutMs);
     const signal = outer ? combineSignals(outer, timeout) : timeout;
-    /**
-     * 한 번 요청한다. 주입된 fetch가 있으면 그것을 쓰고(테스트·다른 구현),
-     * 없으면 연결 직전에도 주소를 다시 검사하는 요청을 쓴다 (DNS 리바인딩 방지).
-     */
     const request = async (u: URL): Promise<LinkPage> => {
       if (opts.fetch) {
         const r = await opts.fetch(u.href, { redirect: 'manual', signal, headers });
@@ -1019,8 +1018,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       const p = await pinnedGet(u, { signal, headers, resolve: hostAddrs, isBlocked: isPrivateHost });
       return { status: p.status, url: '', headers: p.headers, read: p.read };
     };
-    // 리디렉션은 직접 따라가며 매 단계 주소를 확인한다 (요청 전에)
-    let current = first;
+    let current = start;
     let res: LinkPage | null = null;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       await assertPublic(current);
@@ -1044,26 +1042,38 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       }
     }
     if (!res) return fail(t('bridge.knowledge.fetchFailed'));
-    if (res.status < 200 || res.status >= 300) fail(t('bridge.knowledge.fetchFailed'));
     // 주입된 fetch가 스스로 따라간 경우도 최종 주소를 다시 본다
     const finalUrl = res.url || current.href;
     if (isPrivateHost(new URL(finalUrl).hostname)) fail(t('bridge.knowledge.privateHost'));
-    const type = res.headers.get('content-type') ?? '';
-    if (type && !/text\/|html|xml/i.test(type)) fail(t('bridge.knowledge.notHtml'));
     const len = Number(res.headers.get('content-length') ?? '0');
-    if (len > HTML_MAX_BYTES) fail(t('bridge.knowledge.htmlTooLarge'));
+    if (len > maxBytes) fail(t(tooLarge));
     let buf: Uint8Array | null;
     try {
-      buf = await res.read(HTML_MAX_BYTES);
+      buf = await res.read(maxBytes);
     } catch {
       if (outer?.aborted) throw cancelledError();
       return fail(t('bridge.knowledge.fetchFailed'));
     }
-    if (!buf) fail(t('bridge.knowledge.htmlTooLarge'));
-    const html = new TextDecoder('utf-8').decode(buf);
-    const title = extractTitle(html);
-    const markdown = htmlToMarkdown(html);
-    return { title, markdown, finalUrl };
+    if (!buf) fail(t(tooLarge));
+    return { status: res.status, headers: res.headers, url: finalUrl, body: buf };
+  }
+
+  /** 링크 한 개를 가져온다 (네트워크, 큐 밖에서 실행). 마크다운 본문을 돌려준다 */
+  async function fetchPage(url: string, outer?: AbortSignal): Promise<{ title: string; markdown: string; finalUrl: string }> {
+    if (!isKnowledgeLinkUrl(url)) fail(t('bridge.knowledge.badUrl'));
+    const r = await httpGet(
+      new URL(url.trim()),
+      outer,
+      { accept: 'text/html,application/xhtml+xml,text/plain;q=0.8' },
+      HTML_MAX_BYTES,
+      FETCH_TIMEOUT_MS,
+      'bridge.knowledge.htmlTooLarge',
+    );
+    if (r.status < 200 || r.status >= 300) fail(t('bridge.knowledge.fetchFailed'));
+    const type = r.headers.get('content-type') ?? '';
+    if (type && !/text\/|html|xml/i.test(type)) fail(t('bridge.knowledge.notHtml'));
+    const html = new TextDecoder('utf-8').decode(r.body);
+    return { title: extractTitle(html), markdown: htmlToMarkdown(html), finalUrl: r.url };
   }
 
   async function addDocument(id: string, dir: string, name: string, body: string | Uint8Array, budget: Budget): Promise<string> {
@@ -1075,6 +1085,139 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
     budget.files++;
     budget.bytes += size;
     return relOf(id, target);
+  }
+
+  /**
+   * ZIP(tar.gz) 가져오기 (ADR-138): codeload에서 받아 임시 폴더에 풀고, 확인 후 repos/로 옮긴다.
+   * 숨김 항목(.git 등)은 풀지 않으므로 pull은 할 수 없다 (mode는 zip으로 기록).
+   */
+  async function zipImport(id: string, repo: { owner: string; repo: string }, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult> {
+    ctl?.onProgress?.({ phase: 'download' });
+    const archiveUrl = new URL(`https://codeload.github.com/${repo.owner}/${repo.repo}/tar.gz/HEAD`);
+    const res = await httpGet(
+      archiveUrl,
+      ctl?.signal,
+      { accept: 'application/gzip, application/octet-stream;q=0.9, */*;q=0.5' },
+      ARCHIVE_MAX_BYTES,
+      ARCHIVE_TIMEOUT_MS,
+      'bridge.knowledge.archiveTooLarge',
+    );
+    if (res.status < 200 || res.status >= 300) fail(t('bridge.knowledge.repoNotFound'));
+    ctl?.onProgress?.({ phase: 'extract' });
+    const tmp = path.join(kbDir(id), `.zip-${randomBytes(6).toString('hex')}`);
+    try {
+      let parsed;
+      try {
+        parsed = parseTarGz(res.body, {
+          maxEntries: ARCHIVE_MAX_ENTRIES,
+          maxFileBytes: KNOWLEDGE_LIMITS.fileBytes,
+          maxTotalBytes: KNOWLEDGE_LIMITS.totalBytes,
+        });
+      } catch (err) {
+        if (err instanceof TarFormatError) {
+          const key: Record<TarFormatError['reason'], MessageKey> = {
+            format: 'bridge.knowledge.archiveFormat',
+            too_many: 'bridge.knowledge.archiveTooMany',
+            too_large: 'bridge.knowledge.archiveTooLarge',
+            escape: 'bridge.knowledge.archiveEscape',
+          };
+          fail(t(key[err.reason]));
+        }
+        throw err;
+      }
+      await mkdir(tmp, { recursive: true });
+      let written = 0;
+      let skipped = parsed.skipped;
+      for (const e of parsed.entries) {
+        // 조각마다 안전한 이름인지 본다 (Windows 금지 문자 등)
+        const segs = e.path.split('/');
+        if (!segs.every(isSafeSegment)) {
+          skipped++;
+          continue;
+        }
+        const abs = path.join(tmp, ...segs);
+        if (e.dir) {
+          await mkdir(abs, { recursive: true });
+          continue;
+        }
+        await mkdir(path.dirname(abs), { recursive: true });
+        await writeFile(abs, e.data ?? new Uint8Array(0), { flag: 'wx' });
+        written++;
+        ctl?.onProgress?.({ phase: 'extract', files: written });
+      }
+      ctl?.onProgress?.({ phase: 'save' });
+      return await serial(async () => {
+        if (ctl?.signal?.aborted) throw cancelledError();
+        await existingKb(id);
+        await assertCloneFits(id, tmp);
+        const rel = await placeImported(id, tmp, repo.repo, { location: `https://github.com/${repo.owner}/${repo.repo}.git`, mode: 'zip' });
+        await touch(id);
+        return { added: [rel], skipped };
+      });
+    } finally {
+      await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * 클론하는 동안 임시 폴더 크기를 주기적으로 재서, 남은 용량을 넘으면 git을 멈춘다.
+   * 다 받은 뒤에야 한도를 확인하면 큰 저장소가 디스크를 먼저 채울 수 있다.
+   */
+  async function cloneWithinBudget(id: string, url: string, tmp: string, ctl?: KnowledgeTaskControl): Promise<void> {
+    const room = await roomLeft(id);
+    if (room <= 0) fail(t('bridge.knowledge.tooManyBytes'));
+    const inner = new AbortController();
+    const outer = ctl?.signal;
+    const relay = () => inner.abort();
+    if (outer?.aborted) inner.abort();
+    outer?.addEventListener('abort', relay);
+    let over = false;
+    let checking = false;
+    const timer = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void diskUsage(tmp, room)
+        .then((n) => {
+          if (n > room) {
+            over = true;
+            inner.abort();
+          }
+        })
+        .finally(() => {
+          checking = false;
+        });
+    }, cloneWatchMs);
+    try {
+      await runGit(gitCloneArgs(url, tmp), kbDir(id), { ...ctl, signal: inner.signal }, 'clone');
+    } catch (err) {
+      if (over && !outer?.aborted) fail(t('bridge.knowledge.tooManyBytes'));
+      throw err;
+    } finally {
+      clearInterval(timer);
+      outer?.removeEventListener('abort', relay);
+    }
+  }
+
+  /** git 클론 가져오기 (ADR-138): .git을 남겨 두고, 심볼릭 링크만 지운다 */
+  async function gitImport(id: string, repo: { repo: string; url: string }, ctl?: KnowledgeTaskControl): Promise<KnowledgeAddResult> {
+    // 임시 클론은 지식베이스 폴더 안(files/ 밖)에 두고, 확인 후 files/repos/로 옮긴다
+    const tmp = path.join(kbDir(id), `.clone-${randomBytes(6).toString('hex')}`);
+    try {
+      ctl?.onProgress?.({ phase: 'clone' });
+      await cloneWithinBudget(id, repo.url, tmp, ctl);
+      ctl?.onProgress?.({ phase: 'save' });
+      await removeSymlinks(tmp);
+      return await serial(async () => {
+        if (ctl?.signal?.aborted) throw cancelledError();
+        await existingKb(id);
+        await assertCloneFits(id, tmp);
+        const rel = await placeImported(id, tmp, repo.repo, { location: repo.url, mode: 'clone' });
+        await touch(id);
+        return { added: [rel], skipped: 0 };
+      });
+    } finally {
+      await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   const store: KnowledgeStore = {
@@ -1115,12 +1258,6 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       return serial(async () => {
         const clean = cleanKnowledgeName(name);
         if (!clean) fail(t('bridge.knowledge.badName'));
-        const kind: KnowledgeKind = opts?.kind ?? 'document';
-        if (!isKnowledgeKind(kind)) fail(t('bridge.knowledge.badSettings'));
-        if (opts?.linkedPath !== undefined && kind !== 'codebase') {
-          throw new KnowledgePolicyError('linked_kind_locked', 'only codebase knowledge bases can link a folder');
-        }
-        const linkedPath = opts?.linkedPath !== undefined ? await validateLinkedFolder(opts.linkedPath, root) : undefined;
         await mkdir(root, { recursive: true });
         const id = newId('kb');
         checkId(id);
@@ -1131,88 +1268,11 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
           name: clean,
           createdAt: now,
           updatedAt: now,
-          kind,
           ...(description ? { description } : {}),
-          ...(linkedPath ? { linkedPath } : {}),
-          ...(kind === 'codebase' ? { excludes: cleanExcludes(opts?.excludes) } : {}),
-          // 문서형은 로컬 해시 임베딩으로 시작한다 (키 없이도 동작). 코드베이스는 색인 설정이 없다 (ADR-127)
-          ...(kind === 'document' ? { settings: { embedding: { ...NEW_DOCUMENT_INDEX_SETTINGS.embedding } } } : {}),
-          ...(linkedPath ? {} : { stats: { fileCount: 0, totalBytes: 0 } }),
+          stats: { fileCount: 0, totalBytes: 0 },
         };
         await saveMeta(id, meta);
         return toBase(id, meta);
-      });
-    },
-
-    setKind(id, kind, migratedFrom) {
-      return serial(async () => {
-        const meta = await existingKb(id);
-        if (!isKnowledgeKind(kind)) fail(t('bridge.knowledge.badSettings'));
-        if (!canChangeKind({ kind: meta.kind, linkedPath: meta.linkedPath }, kind)) {
-          throw new KnowledgePolicyError('linked_kind_locked', 'linked codebase knowledge base cannot become a document base');
-        }
-        const next: KbMeta = { ...meta, kind, updatedAt: Date.now() };
-        delete next.kindSuggestion;
-        if (kind === 'codebase') {
-          next.excludes = meta.excludes ?? [];
-          delete next.settings;
-        } else {
-          delete next.excludes;
-          if (!next.settings) next.settings = { embedding: { ...NEW_DOCUMENT_INDEX_SETTINGS.embedding } };
-        }
-        if (migratedFrom) next.migratedFrom = migratedFrom;
-        const toSave = await withStats(id, next);
-        if (kind === 'codebase') {
-          // 연결을 먼저 닫는다 (파일을 옮기려면 필요). 메타를 먼저 저장하고 나서 색인 파일을 백업 폴더로 옮긴다 (ADR-132).
-          // 메타 저장이 실패하면 아무것도 옮기지 않는다. 옮기다 실패하면 메타를 원래대로 되돌린다.
-          if (opts.releaseIndex) await opts.releaseIndex(id);
-          await saveMeta(id, toSave);
-          if (hasIndexFiles(kbDir(id))) {
-            try {
-              moveIndexFilesToBackup(kbDir(id), {
-                now: Date.now(),
-                reason: migratedFrom ? migratedFrom.reason : 'kind_change',
-                fromKind: meta.kind,
-                toKind: kind,
-              });
-            } catch (err) {
-              await saveMeta(id, meta).catch(() => undefined);
-              throw err;
-            }
-          }
-          return toBase(id, toSave);
-        }
-        await saveMeta(id, toSave);
-        return toBase(id, next);
-      });
-    },
-
-    restoreIndexBackup(id) {
-      return serial(async () => {
-        const meta = await existingKb(id);
-        if (meta.kind === 'codebase') return false;
-        return restoreLatestIndexBackup(kbDir(id));
-      });
-    },
-
-    setKindSuggestion(id, suggestion) {
-      return serial(async () => {
-        const meta = await existingKb(id);
-        const next: KbMeta = { ...meta };
-        delete next.kindSuggestion;
-        if (suggestion && !meta.kind) next.kindSuggestion = { kind: suggestion.kind, reason: suggestion.reason };
-        await saveMeta(id, next);
-        return toBase(id, next);
-      });
-    },
-
-    setExcludes(id, excludes) {
-      return serial(async () => {
-        const meta = await existingKb(id);
-        if (meta.kind !== 'codebase') fail(t('bridge.knowledge.badSettings'));
-        const next: KbMeta = { ...meta, excludes: cleanExcludes(excludes), updatedAt: Date.now() };
-        await saveMeta(id, await withStats(id, next));
-        return toBase(id, next);
       });
     },
 
@@ -1236,26 +1296,21 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
 
     async tree(id, dir) {
       const meta = await existingKb(id);
+      if (typeof dir !== 'string') fail(t('bridge.knowledge.badPath'));
       const base = baseOf(id, meta);
-      if (dir === undefined) {
-        const out: KnowledgeEntry[] = [];
-        await walk(base, '', out, { n: 0 });
-        return out;
-      }
       const { abs, exists } = await locate(id, dir || undefined, true, base);
       if (!exists) fail(t('bridge.knowledge.entryNotFound'));
       if (dir && !(await lstatOrNull(abs))?.isDirectory()) fail(t('bridge.knowledge.badPath'));
-      return listLevel(abs, dir);
-    },
-
-    async index(id) {
-      const meta = await existingKb(id);
-      return outline(baseOf(id, meta), KNOWLEDGE_LIMITS.indexPaths);
-    },
-
-    dirFor(id) {
-      // 연결 폴더 코드베이스는 그 폴더, 아니면 files/ (답변 CLI 작업 폴더)
-      return filesRootOf(root, checkId(id)) ?? filesDir(id);
+      const entries = await listLevel(abs, dir);
+      const sources = meta.sources ?? [];
+      if (sources.length === 0) return entries;
+      // 출처 저장 위치와 같은 항목에 출처를 붙인다 (팝업이 GitHub 표시와 pull 버튼에 쓴다)
+      const byDest = new Map(sources.map((s) => [s.dest, s]));
+      for (const e of entries) {
+        const s = byDest.get(e.path);
+        if (s) e.source = s;
+      }
+      return entries;
     },
 
     addPaths(id, paths, dest, ctl) {
@@ -1359,42 +1414,48 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       });
     },
 
-    async cloneGit(id, url, ctl) {
+    async cloneGit(id, url, opts2, ctl) {
       await writableKb(id);
       await checkDiskRoom();
+      const mode: GitImportMode = opts2?.mode ?? 'clone';
+      if (!isGitImportMode(mode)) fail(t('bridge.knowledge.badMode'));
       const repo = parseGitHubRepo(url);
       if (!repo) fail(t('bridge.knowledge.badRepo'));
-      // 임시 클론은 지식베이스 폴더 안(files/ 밖)에 두고, 확인 후 files/repos/로 옮긴다
-      const tmp = path.join(kbDir(id), `.clone-${randomBytes(6).toString('hex')}`);
-      try {
-        ctl?.onProgress?.({ phase: 'clone' });
-        await runGit(gitCloneArgs(repo.url, tmp), kbDir(id), ctl);
-        ctl?.onProgress?.({ phase: 'save' });
-        await rm(path.join(tmp, '.git'), { recursive: true, force: true });
-        await removeSymlinks(tmp);
-        return await serial(async () => {
-          if (ctl?.signal?.aborted) throw cancelledError();
-          await existingKb(id);
-          await assertCloneFits(id, tmp);
-          const reposDir = await ensureDir(id, 'repos');
-          const target = path.join(reposDir, await uniqueName(reposDir, repo.repo));
-          await rename(tmp, target);
-          const rel = relOf(id, target);
-          await recordSources(id, [{ type: 'github', location: repo.url, dest: rel }]);
-          await touch(id);
-          return { added: [rel], skipped: 0 };
-        });
-      } finally {
-        await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-      }
+      return mode === 'zip' ? zipImport(id, repo, ctl) : gitImport(id, repo, ctl);
+    },
+
+    pullGit(id, relPath, ctl) {
+      return serial(async () => {
+        if (ctl?.signal?.aborted) throw cancelledError();
+        const meta = await writableKb(id);
+        const src = (meta.sources ?? []).find((s) => s.type === 'github' && s.dest === relPath);
+        // clone으로 받은 저장소만 갱신한다 (zip에는 이력이 없다)
+        if (!src || src.mode !== 'clone') fail(t('bridge.knowledge.pullNotClone'));
+        const { abs, exists } = await locate(id, relPath, true);
+        if (!exists || !(await lstatOrNull(path.join(abs, '.git')))?.isDirectory()) fail(t('bridge.knowledge.pullNotClone'));
+        ctl?.onProgress?.({ phase: 'pull' });
+        await runGit(gitPullArgs(), abs, ctl, 'pull');
+        await removeSymlinks(abs);
+        const now = Date.now();
+        const cur = await readMeta(id);
+        if (cur) {
+          const rows = (cur.sources ?? []).map((s) => (s.id === src.id ? { ...s, updatedAt: now } : s));
+          await saveMeta(id, { ...cur, sources: rows });
+        }
+        await touch(id);
+        return { added: [relPath], skipped: 0 };
+      });
     },
 
     removeEntry(id, relPath) {
       return serial(async () => {
-        await writableKb(id);
+        const meta = await writableKb(id);
         if (!relPath) fail(t('bridge.knowledge.badPath'));
         const { abs, exists } = await locate(id, relPath, false);
         if (!exists) fail(t('bridge.knowledge.entryNotFound'));
+        // 출처 기록을 먼저 지운다: 삭제 도중 실패해도 사라진 폴더를 가리키는 기록이 남지 않는다
+        const remain = (meta.sources ?? []).filter((s) => s.dest !== relPath && !s.dest.startsWith(`${relPath}/`));
+        if (remain.length !== (meta.sources ?? []).length) await saveMeta(id, { ...meta, sources: remain });
         await rm(abs, { recursive: true, force: false });
         await touch(id);
       });
@@ -1409,7 +1470,13 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       const fh = await open(abs, 'r');
       try {
         const buf = Buffer.alloc(Math.min(st.size, PREVIEW_READ_BYTES));
-        const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+        // read는 요청보다 적게 읽을 수 있으므로 끝까지 채운다
+        let bytesRead = 0;
+        while (bytesRead < buf.length) {
+          const r = await fh.read(buf, bytesRead, buf.length - bytesRead, bytesRead);
+          if (r.bytesRead === 0) break;
+          bytesRead += r.bytesRead;
+        }
         const head = buf.subarray(0, bytesRead);
         if (head.includes(0)) return { text: null, size: st.size, truncated: false };
         const full = head.toString('utf8');
@@ -1432,71 +1499,9 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       });
     },
 
-    async getSettings(id) {
-      const meta = await existingKb(id);
-      return meta.settings ?? { embedding: { ...DEFAULT_INDEX_SETTINGS.embedding } };
-    },
-
-    setSettings(id, settings) {
-      return serial(async () => {
-        const meta = await existingKb(id);
-        if (meta.kind === 'codebase') {
-          throw new KnowledgePolicyError('codebase_index_forbidden', 'index settings do not apply to codebase knowledge bases');
-        }
-        if (!isIndexSettings(settings)) fail(t('bridge.knowledge.badSettings'));
-        const clean: KnowledgeIndexSettings = {
-          embedding: {
-            provider: settings.embedding.provider,
-            ...(settings.embedding.model ? { model: settings.embedding.model } : {}),
-            ...(settings.embedding.provider === 'openai' && settings.embedding.dimensions ? { dimensions: settings.embedding.dimensions } : {}),
-          },
-          ...(settings.autoIndex === false ? { autoIndex: false } : {}),
-        };
-        await saveMeta(id, { ...meta, settings: clean, updatedAt: Date.now() });
-        return clean;
-      });
-    },
-
     async sources(id) {
       const meta = await existingKb(id);
       return meta.sources ?? [];
-    },
-
-    async updateSource(id, sourceId, ctl) {
-      const meta = await writableKb(id);
-      const src = (meta.sources ?? []).find((s) => s.id === sourceId);
-      if (!src) fail(t('bridge.knowledge.entryNotFound'));
-      if (src.type === 'files') fail(t('bridge.knowledge.sourceNoOrigin'));
-      // 새 항목을 먼저 받아 두고, 성공하면 이전 항목을 같은 자리로 바꿔 끼운다
-      const fresh =
-        src.type === 'web'
-          ? await store.addLink(id, src.location, ctl)
-          : src.type === 'github'
-            ? await store.cloneGit(id, src.location, ctl)
-            : await store.addPaths(id, [src.location], path.posix.dirname(src.dest) === '.' ? undefined : path.posix.dirname(src.dest), ctl);
-      const newRel = fresh.added[0];
-      if (!newRel) return fresh;
-      return serial(async () => {
-        // 받는 동안 KB가 지워지거나 유형이 바뀌었으면 교체하지 않는다 (새로 받은 항목은 치운다)
-        const cur = await existingKb(id);
-        if (cur.kind !== meta.kind) {
-          if (newRel !== src.dest) await rm((await locate(id, newRel, true)).abs, { recursive: true, force: true });
-          fail(t('bridge.knowledge.badSettings'));
-        }
-        const oldAbs = (await locate(id, src.dest, false)).abs;
-        const newAbs = (await locate(id, newRel, true)).abs;
-        if (newRel !== src.dest) {
-          await rm(oldAbs, { recursive: true, force: true });
-          await rename(newAbs, oldAbs);
-        }
-        const now = Date.now();
-        // 방금 추가되며 생긴 새 출처 행은 빼고, 기존 행만 갱신한다
-        const rows = (cur.sources ?? [])
-          .filter((s) => s.id === src.id || s.dest !== newRel)
-          .map((s) => (s.id === src.id ? { ...s, updatedAt: now } : s));
-        await saveMeta(id, await withStats(id, { ...cur, sources: rows, updatedAt: now }));
-        return { added: [src.dest], skipped: fresh.skipped };
-      });
     },
 
     async resolvePath(id, relPath) {
@@ -1505,12 +1510,19 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       if (!exists) fail(t('bridge.knowledge.entryNotFound'));
       return abs;
     },
+
+    dirFor(id) {
+      // 연결 폴더(구버전)는 그 폴더, 아니면 files/ (답변 CLI 작업 폴더)
+      return filesRootOf(root, checkId(id)) ?? filesDir(id);
+    },
   };
 
   /** 파일이 바뀐 뒤: 수정 시각과 크기·개수 캐시를 갱신한다 (메타 파일이 있을 때만) */
   async function touch(id: string) {
     const meta = await readMeta(id);
-    if (meta) await saveMeta(id, await withStats(id, { ...meta, updatedAt: Date.now() }));
+    if (!meta) return;
+    const stats = await measureKb(id, meta);
+    await saveMeta(id, { ...meta, stats, updatedAt: Date.now() });
   }
 
   return store;

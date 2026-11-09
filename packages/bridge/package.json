@@ -11,13 +11,11 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "eval:rag": "vitest run --config vitest.eval.config.ts",
     "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/cli.cjs --banner:js=\"#!/usr/bin/env node\"",
     "start": "node dist/cli.cjs"
   },
   "dependencies": {
     "@branch/core": "workspace:*",
-    "@vscode/tree-sitter-wasm": "0.3.1",
     "jpeg-js": "^0.4.4",
     "pdfjs-dist": "6.4.299",
     "pngjs": "^7.0.0",

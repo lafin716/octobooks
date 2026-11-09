@@ -12,7 +12,6 @@ import { Markdown } from './Markdown';
 import { openBranch } from './open';
 import { setSegmentMap } from './segmentRegistry';
 import { ToolActivityList } from './ToolActivityList';
-import { CitationChips } from '../knowledge/CitationChips';
 import { RagTraceLine } from '../knowledge/RagTraceLine';
 import { BranchChips, SummaryCard } from './SummaryCard';
 import { AnnotationPopover } from './AnnotationPopover';
@@ -173,7 +172,6 @@ export function AssistantMessage({ message, branches, isLast, skill }: MessageIt
         </div>
       )}
 
-      {!streaming && message.citations?.length ? <CitationChips citations={message.citations} /> : null}
       {!streaming && message.ragTrace ? <RagTraceLine trace={message.ragTrace} /> : null}
       {images.length > 0 && <AttachmentList items={images} large messageId={message.id} />}
 

@@ -9,7 +9,6 @@ import { detectAll } from './detect';
 import { resolveCliEnv, type CliEnv } from './env';
 import type { CliParser } from './parser';
 import { runCli } from './run';
-import { KnowledgeNotFoundError, type KnowledgeStore } from './knowledgeStore';
 import type { SttEngine } from './stt/engine';
 import { KB_MAX_KBS_PER_CHAT, KB_MCP_SERVER_NAME, KB_MCP_TOOL_PREFIX, type KbToolsLauncher } from './kbTools/config';
 import { kbToolsNote } from './kbTools/note';
@@ -29,11 +28,9 @@ export interface BridgeServerOptions {
   log?: (msg: string) => void;
   /** 음성 전사 엔진 (ADR-045). 없으면 stt.* 요청에 '지원 안 함'으로 답한다 */
   stt?: SttEngine;
-  /** 학습별 지식베이스 (ADR-107). chat.start.knowledgeId가 있을 때만 쓴다 */
-  knowledge?: KnowledgeStore;
   /**
-   * 지식베이스 MCP 서버 실행 정보 (ADR-124). 있으면 CLI는 이 서버의 읽기 도구로 여러 KB를 찾는다.
-   * 없으면 예전 방식(첫 KB의 개요를 안내문에 붙임)을 쓴다
+   * 지식베이스 MCP 서버 실행 정보 (ADR-124). 있으면 CLI는 이 서버의 읽기 도구로 KB 파일을 탐색한다.
+   * 미리 검색한 결과나 폴더 개요는 답변에 넣지 않는다 (ADR-137)
    */
   knowledgeTools?: KbToolsLauncher;
 }
@@ -58,13 +55,6 @@ const imageGenNote = () => t('bridge.server.imageGenNote');
 
 const sttUnsupported = () => t('bridge.server.sttUnsupported');
 
-/** 답변에 붙는 지식베이스 정보: 폴더 절대 경로와 얕은 폴더 개요 (ADR-119) */
-interface KnowledgeContext {
-  dir: string;
-  paths: string[];
-  truncated: boolean;
-}
-
 /** MCP 지식 도구 계획: 실행 인자, 이번 답의 KB 목록 (ADR-124) */
 interface KbMcpPlan {
   command: string;
@@ -81,14 +71,6 @@ async function existingKbIds(root: string, ids: string[]): Promise<string[]> {
     if (s?.isDirectory()) out.push(id);
   }
   return out;
-}
-
-/** 지식베이스 안내문. 개요는 한 줄에 하나, 잘렸으면 끝에 '…' */
-export function knowledgeNote(kb: KnowledgeContext, key: 'bridge.knowledge.systemNote' | 'bridge.knowledge.codexIndex'): string {
-  // 파일 이름의 줄바꿈·제어 문자는 공백으로: 이름으로 안내문에 줄을 끼워 넣지 못하게
-  const lines = kb.paths.length ? kb.paths.map((p) => `- ${p.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ')}`) : ['-'];
-  if (kb.truncated) lines.push('- …');
-  return t(key, { dir: kb.dir, outline: lines.join('\n') });
 }
 
 /**
@@ -194,28 +176,12 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
   }
 
   /**
-   * 학습의 지식베이스 (ADR-107). 저장소가 없거나, knowledgeId가 없거나 형식이 틀리거나,
-   * 없는 지식베이스면 null (지식베이스 없이 답한다). 그 밖의 읽기 오류만 throw
-   */
-  async function knowledgeFor(msg: ChatStartMsg): Promise<KnowledgeContext | null> {
-    // 빠른 모드는 CLI에 지식베이스를 열어 주지 않는다 (RAG 설정 롤백 규칙)
-    if (!opts.knowledge || msg.knowledgeMode === 'fast' || !isKnowledgeId(msg.knowledgeId)) return null;
-    try {
-      const { paths, truncated } = await opts.knowledge.index(msg.knowledgeId);
-      return { dir: opts.knowledge.dirFor(msg.knowledgeId), paths, truncated };
-    } catch (err) {
-      if (err instanceof KnowledgeNotFoundError) return null;
-      throw err;
-    }
-  }
-
-  /**
    * 이번 답의 지식베이스 MCP 계획 (ADR-124). 선택된 KB 중 폴더가 있는 것만 최대 8개.
-   * 실행 정보가 없거나 빠른 모드거나 쓸 KB가 없으면 null
+   * 실행 정보가 없거나 쓸 KB가 없으면 null (지식베이스 없이 답한다)
    */
   async function kbMcpFor(msg: ChatStartMsg): Promise<KbMcpPlan | null> {
     const launcher = opts.knowledgeTools;
-    if (!launcher || msg.knowledgeMode === 'fast') return null;
+    if (!launcher) return null;
     const ids = await existingKbIds(launcher.root, knowledgeIdsOf(msg).filter(isKnowledgeId).slice(0, KB_MAX_KBS_PER_CHAT));
     if (!ids.length) return null;
     const { entries } = await loadKbEntries(launcher.root, ids);
@@ -236,12 +202,9 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
     const env = await cliEnv;
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'branch-bridge-'));
     try {
-      let kb: KnowledgeContext | null = null;
       let mcp: KbMcpPlan | null = null;
       try {
         mcp = await kbMcpFor(msg);
-        // MCP 실행 정보가 있으면 예전 개요 방식은 쓰지 않는다 (지식 도구가 대신한다)
-        if (!mcp && !opts.knowledgeTools) kb = await knowledgeFor(msg);
       } catch (err) {
         emit({ type: 'error', error: providerError('unknown', err instanceof Error ? err.message : String(err)) });
         return;
@@ -256,7 +219,7 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
       let codexThread: (() => string | undefined) | null = null;
       if (msg.providerId === 'claude-cli') {
         const systemFile = path.join(workDir, 'system.txt');
-        const claudeNote = mcp ? kbToolsNote(mcp.entries, 'claude-cli', msg.knowledgeMode) : kb ? knowledgeNote(kb, 'bridge.knowledge.systemNote') : '';
+        const claudeNote = mcp ? kbToolsNote(mcp.entries, 'claude-cli') : '';
         const claudeSystem = claudeNote ? `${system}\n\n${claudeNote}` : system;
         await writeFile(systemFile, claudeSystem, { mode: 0o600 });
         args = claudeArgs({
@@ -264,8 +227,6 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
           ...cliModelOptions(msg),
           inputJson: files.length > 0,
           webSearch: msg.webSearch === true,
-          knowledge: !mcp && kb !== null,
-          knowledgeDir: mcp ? undefined : kb?.dir,
           kbMcp: mcp
             ? {
                 config: JSON.stringify({ mcpServers: { [KB_MCP_SERVER_NAME]: { type: 'stdio', command: mcp.command, args: mcp.args, env: mcp.env } } }),
@@ -274,7 +235,7 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
             : undefined,
         });
         stdin = files.length ? claudeJsonInput(prompt, files) : prompt;
-        parser = createClaudeParser({ knowledgeDir: mcp ? undefined : kb?.dir });
+        parser = createClaudeParser();
       } else {
         // Codex는 이미지만 파일로 넘길 수 있다. PDF는 이름만 알린다
         const images: string[] = [];
@@ -285,8 +246,8 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
         }
         const note = binaryNote(files.filter((f) => f.kind === 'pdf'));
         const imageGen = msg.imageGen === true;
-        // Codex는 셸이 꺼져 있어 파일 내용을 읽지 못한다 (ADR-070). 개요만 알리고 검색 발췌에 근거하게 한다
-        const codexNote = mcp ? kbToolsNote(mcp.entries, 'codex-cli', msg.knowledgeMode) : kb ? knowledgeNote(kb, 'bridge.knowledge.codexIndex') : '';
+        // Codex는 셸이 꺼져 있어 파일을 직접 읽지 못한다 (ADR-070). 지식 도구(MCP)로만 KB를 읽는다
+        const codexNote = mcp ? kbToolsNote(mcp.entries, 'codex-cli') : '';
         const codexSystem = codexNote ? `${system}\n\n${codexNote}` : system;
         args = codexArgs({
           ...cliModelOptions(msg),

@@ -9,16 +9,12 @@ import {
 } from '@branch/core';
 import type {
   DesktopKnowledgeApi,
+  GitImportMode,
   KnowledgeAddResult,
   KnowledgeBase,
-  KnowledgeDoc,
   KnowledgeEntry,
-  KnowledgeIndexSettings,
-  KnowledgeIndexState,
   KnowledgePreview,
   KnowledgeProgress,
-  KnowledgeSource,
-  SourceView,
   SyncEventTopic,
   SyncRpcMethod,
 } from '@branch/core';
@@ -42,6 +38,8 @@ export interface RemoteKnowledgeDeps {
 }
 
 const UPLOAD_TIMEOUT_MS = 30_000;
+/** GitHub 클론·pull 응답 대기 (PC의 클론 제한 10분 + 여유) */
+const GIT_TIMEOUT_MS = 11 * 60_000;
 const RATE_LIMIT_RETRIES = 6;
 
 const emptyResult = (): KnowledgeAddResult => ({ added: [], skipped: 0 });
@@ -54,7 +52,6 @@ export function isRemoteForbidden(e: unknown): boolean {
 /**
  * 원격(휴대폰·웹·세션 창)에서 PC의 지식베이스를 다루는 DesktopKnowledgeApi.
  * 순수 모듈: rpc·이벤트·파일 선택을 주입받아 노드 테스트가 가능하다.
- * retrieve는 두지 않는다(검색·답변은 PC에서 실행).
  */
 export function createRemoteKnowledgeApi(deps: RemoteKnowledgeDeps): DesktopKnowledgeApi {
   const { rpc } = deps;
@@ -129,17 +126,15 @@ export function createRemoteKnowledgeApi(deps: RemoteKnowledgeDeps): DesktopKnow
 
   return {
     list: () => rpc<KnowledgeBase[]>('knowledge.list'),
-    create: (name) => rpc<KnowledgeBase>('knowledge.create', [name]),
+    create: async (name, opts) => {
+      // knowledge.create RPC는 이름만 받는다. 설명은 만든 뒤 setDescription으로 맞춘다.
+      const kb = await rpc<KnowledgeBase>('knowledge.create', [name]);
+      const description = opts?.description?.trim();
+      return description ? rpc<KnowledgeBase>('knowledge.setDescription', [kb.id, description]) : kb;
+    },
     rename: (id, name) => rpc<KnowledgeBase>('knowledge.rename', [id, name]),
     remove: (id) => rpc<void>('knowledge.remove', [id]),
-    // 이전 버전 PC는 dir 인자를 거절한다: 그때는 전체 목록을 받는다 (화면이 경로로 합친다)
-    tree: (id, dir) =>
-      dir === undefined
-        ? rpc<KnowledgeEntry[]>('knowledge.tree', [id])
-        : rpc<KnowledgeEntry[]>('knowledge.tree', [id, dir]).catch((e: unknown) => {
-            if (e instanceof SyncRpcCallError && e.code === 'invalid') return rpc<KnowledgeEntry[]>('knowledge.tree', [id]);
-            throw e;
-          }),
+    tree: (id, dir) => rpc<KnowledgeEntry[]>('knowledge.tree', [id, dir]),
     pathForFile: () => '',
     addPaths: async () => {
       throw new Error(t('knowledge.remote.noOpen'));
@@ -156,7 +151,10 @@ export function createRemoteKnowledgeApi(deps: RemoteKnowledgeDeps): DesktopKnow
       return uploadFiles(id, picked, dest);
     },
     addLink: (id, url) => rpc<KnowledgeAddResult>('knowledge.addLink', [id, url]),
-    cloneGit: (id, url) => rpc<KnowledgeAddResult>('knowledge.cloneGit', [id, url]),
+    // 클론·pull은 PC에서 최대 10분 걸릴 수 있다 (bridge CLONE_TIMEOUT_MS). 기본 15초로 끊으면 PC는 계속 받는데 원격만 실패로 보인다
+    cloneGit: (id, url, opts?: { mode?: GitImportMode }) =>
+      rpc<KnowledgeAddResult>('knowledge.cloneGit', opts ? [id, url, opts] : [id, url], { timeoutMs: GIT_TIMEOUT_MS }),
+    pullGit: (id, path) => rpc<KnowledgeAddResult>('knowledge.pullGit', [id, path], { timeoutMs: GIT_TIMEOUT_MS }),
     removeEntry: (id, path) => rpc<void>('knowledge.removeEntry', [id, path]),
     preview: (id, path) => rpc<KnowledgePreview>('knowledge.preview', [id, path]),
     open: async () => {
@@ -177,18 +175,5 @@ export function createRemoteKnowledgeApi(deps: RemoteKnowledgeDeps): DesktopKnow
       await rpc<void>('knowledge.cancel');
     },
     setDescription: (id, description) => rpc<KnowledgeBase>('knowledge.setDescription', [id, description]),
-    indexStates: (ids) => rpc<KnowledgeIndexState[]>('knowledge.indexStates', ids ? [ids] : []),
-    reindex: (id, opts) => rpc<void>('knowledge.reindex', opts ? [id, opts] : [id]),
-    cancelIndex: (id) => rpc<void>('knowledge.cancelIndex', [id]),
-    docs: (id, query) => rpc<KnowledgeDoc[]>('knowledge.docs', query ? [id, query] : [id]),
-    getIndexSettings: (id) => rpc<KnowledgeIndexSettings>('knowledge.getIndexSettings', [id]),
-    setIndexSettings: (id, s) => rpc<KnowledgeIndexState>('knowledge.setIndexSettings', [id, s]),
-    sources: (id) => rpc<KnowledgeSource[]>('knowledge.sources', [id]),
-    updateSource: (id, sourceId) => rpc<KnowledgeAddResult>('knowledge.updateSource', [id, sourceId]),
-    source: (kbId, chunkId) => rpc<SourceView>('knowledge.source', [kbId, chunkId]),
-    onIndexState: (listener) =>
-      deps.onEvent((topic, data) => {
-        if (topic === 'knowledge.index') listener(data as KnowledgeIndexState);
-      }),
   };
 }

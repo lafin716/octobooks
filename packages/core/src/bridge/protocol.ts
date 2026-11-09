@@ -1,5 +1,4 @@
 import type { Attachment, ProviderId, ToolActivity } from '../model';
-import type { RagMode } from '../rag/types';
 import type { Availability, ChatTurn, ProviderError } from '../provider';
 import type { SttModelId, SttState, SttStatus } from '../stt';
 
@@ -35,8 +34,6 @@ export interface ChatStartMsg {
   knowledgeId?: string;
   /** 선택된 지식베이스 전체 (ADR-124). 새 bridge는 이 목록을 쓰고, 예전 bridge는 knowledgeId(첫 KB)만 본다 */
   knowledgeIds?: string[];
-  /** 검색 모드 (ADR-122): fast면 CLI 추가 탐색 도구를 붙이지 않는다 */
-  knowledgeMode?: RagMode;
 }
 
 export type BridgeClientMsg =

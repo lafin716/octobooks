@@ -1,5 +1,7 @@
-import type { SearchChannel } from '@branch/core';
 import { definitionPatterns } from './defs';
+
+/** 결과가 걸린 경로 채널 (파일 이름 · 본문 일치 · 정의 줄) */
+export type SearchChannel = 'path' | 'grep' | 'definition';
 import { identifierTerms, splitTerms } from './terms';
 import { scanText, type ScanOptions } from './scan';
 import { CODEBASE_LIMITS, type CodebaseTarget, throwIfAborted } from './target';

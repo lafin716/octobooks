@@ -1,136 +1,110 @@
-# 지식베이스 아키텍처 — Codebase(Agentic) · Document(Hybrid)
+# 지식베이스 아키텍처 — 파일 폴더 + Agentic 탐색 (ADR-136~140, 2026-11-09)
 
-ADR-127~132. 계획·진행: `docs/plans/kb-types-overhaul-plan.md`. 평가: `docs/eval/kb-types-2026-11-06.md`.
-원격 지식팩 설계(미구현): `docs/knowledge-pack-architecture.md`.
+이 문서는 2026-11-06의 Codebase(Agentic)·Document(Hybrid) 구조(ADR-127~134)를 대체한다. 벡터 색인, KB 유형(kind), 사전 검색은 모두 제거됐다.
 
 ## 1. 한눈에
 
-```
-세션(knowledgeIds[])
-   │
-   ▼
-Knowledge Router (core rag/router.ts)
-   ├─ codebase KB ──► Agentic 검색 (bridge codebase/*)  : 파일명 → grep → 정의 → 부분 읽기   [벡터·색인 없음]
-   └─ document/미분류 ► Hybrid 검색 (bridge rag/*)      : FTS5(BM25) + 벡터 → RRF → 부모 문맥 확장
-   ▼
-Context Builder (core rag/contextBuilder.ts) : 중복 제거·관련성·버전 충돌·토큰 예산·출처(path:line / 문서 p.N)
-   ▼
-LLM 프롬프트 (<kb_content> 데이터) + 기본 스킬 "지식베이스 탐색"(skill-knowledge) + MCP 읽기 전용 도구
-```
+- KB 하나는 **파일 폴더 하나**다: `<userData>/knowledge/<kbId>/`.
+  - `meta.json`: 이름, 설명, 출처(sources).
+  - `files/`: 원본 파일(Source of Truth).
+  - `cache/text/`: PDF에서 뽑은 텍스트 캐시(파생 데이터).
+- 파일을 넣는 방법:
+  - 직접 업로드: 파일 선택 또는 끌어 놓기. 폴더도 넣을 수 있다.
+  - GitHub: clone 방식과 ZIP 방식 중에서 고른다.
+  - 링크 URL: 페이지를 마크다운으로 저장한다.
+- 학습(루트 세션)에 `knowledgeIds[]`로 여러 KB를 연결한다. 같은 KB를 여러 학습에 연결할 수 있다.
+- 답변 모델은 **필요할 때만** 읽기 전용 MCP 도구로 연결된 KB 폴더를 직접 탐색한다. 미리 검색하는 단계는 없다.
 
-- **유형은 두 가지뿐**: `codebase` · `document` (`KnowledgeKind`, core `knowledge.ts`). 혼합(Mixed)은 유형이 아니라 세션에 두 유형이 함께 연결된 상태다.
-- **미분류**(`kind` 없음): 구버전에서 넘어와 유형을 확실히 판별하지 못한 KB. 사용자가 고를 때까지 문서형으로 동작하며 UI가 유형 선택을 안내한다(`kindSuggestion`은 안내용, 자동 적용 안 함).
+## 2. 데이터 소유권
 
-## 2. 데이터 소유권 (Source of Truth vs 파생)
-
-| 위치 | 내용 | 성격 |
+| 데이터 | 위치 | 성격 |
 |---|---|---|
-| `<userData>/knowledge/<kbId>/meta.json` | id·이름·설명·kind·linkedPath·excludes·색인 설정·migratedFrom | **원천** |
-| `<kbId>/files/` 또는 `linkedPath`(연결 폴더) | 사용자 원본 | **원천** (앱은 읽기만, 연결 폴더는 절대 쓰지 않음) |
-| `<kbId>/meta/` | 폴더 정보(INFO, ADR-123)·앱 생성 탐색 지도 | 앱 메타 |
-| 세션 `knowledgeIds` | 학습 ↔ KB 연결 | **원천** (core store) |
-| `<kbId>/index.sqlite` (+ `index.next.sqlite`, `index.prev.sqlite`) | 문서 청크·FTS5·벡터 BLOB | **파생** — 지워도 다시 만든다 |
-| `<kbId>/backup/<ts>/` | 마이그레이션·유형 변경 때 옮긴 색인 + manifest | 롤백용 |
+| 원본 파일 | `<kb>/files/**` | Source of Truth. 사용자가 지우기 전에는 보존한다 |
+| 메타·출처 | `<kb>/meta.json` | Source of Truth. `sources[path] = { kind, location, mode? }` |
+| PDF 텍스트 | `<kb>/cache/text/` | 파생 데이터. mtime이나 크기가 바뀌면 다시 뽑는다 |
+| 구버전 색인 | `<kb>/index*.sqlite*`, `<kb>/backup/` | 시작할 때 지운다(멱등). `files/`는 건드리지 않는다 |
+| 남은 임시 폴더 | `<kb>/files/.clone-*`, `.zip-*` | 중단된 가져오기의 흔적. 시작할 때 지운다 |
 
-색인 파일을 지워도 KB 목록·원본·세션 연결·파일 메타는 그대로다. 코드베이스 KB에는 `index*.sqlite`가 존재하지 않아야 한다.
+구버전에서 외부 폴더를 연결한 KB(`linkedPath`)는 **읽기 전용**이다. 탐색은 되지만 업로드, 가져오기, 삭제는 막는다.
 
-## 3. 검색 정책과 강제 지점 (Codebase Vector 금지)
+## 3. 가져오기 (bridge `knowledgeStore.ts`)
 
-판단 기준은 **KB id → meta.json `kind`** 이다. 파일 확장자가 아니다. meta.json을 읽거나 해석하지 못하면 문서형으로 간주하지 않고 색인·벡터 경로를 거부한다(`kb_meta_unreadable`, 실패 시 닫힘, ADR-133). 코드베이스 안의 README·MD·TXT도 그 KB에 속하므로 벡터화하지 않는다.
+- 업로드와 폴더 추가: 경로 탈출과 심볼릭 링크를 막는다. 파일 하나는 20MB, KB 하나는 500MB(`KNOWLEDGE_LIMITS`)까지 넣을 수 있다. 이름이 겹치면 고유한 이름을 붙인다.
+- **GitHub clone**:
+  - `git clone --depth 1`로 받고 `.git`을 남긴다. 저장 위치는 `files/repos/<name>`이다.
+  - 받는 동안 2초마다 임시 폴더의 크기를 잰다(`.git` 포함). 남은 용량을 넘으면 중단하고 "용량 한도" 오류를 낸다.
+  - 갱신은 **Pull**로 한다: `git pull --ff-only --depth 1`.
+  - git 하드닝은 ADR-133과 같다: 셸을 쓰지 않고, 인자를 고정하며, hooks와 프롬프트를 끈다.
+- **GitHub ZIP**:
+  - `codeload.github.com/<o>/<r>/tar.gz/HEAD`를 받아 Node zlib와 내장 tar 파서(`tarExtract.ts`)로 푼다. pax 확장 헤더를 지원한다.
+  - 링크, 경로 탈출, 크기와 개수 한도를 막는다. `.git`이 없으므로 Pull도 없다.
+- 두 방식 모두 임시 폴더에 받은 뒤 `placeImported`로 옮기고 출처를 기록한다. 출처 기록이 실패하면 옮긴 폴더를 지운다.
+- 삭제(`removeEntry`): 파일과 폴더 모두 지울 수 있다. 출처 메타를 먼저 저장한 뒤 지운다.
 
-| 층 | 위치 | 동작 |
-|---|---|---|
-| 정책 | core `knowledgePolicy.ts` — `searchPolicyOf`, `assertIndexAllowed`, `assertVectorAllowed`, `KnowledgePolicyError` | 단일 규칙 |
-| UI | `packages/ui/src/knowledge/*` | 코드베이스에 임베딩·색인 옵션을 아예 표시하지 않음 |
-| IPC | `apps/desktop/src/kbGuard.ts`, `ipc.ts` | 유형 확인 후 색인 설정·재색인·검증 요청 거부 (`kb-guard:<code>: …`) |
-| Store | `bridge knowledgeStore.ts` | `setIndexSettings`·reindex 거부, `setKind('codebase')` 시 색인을 backup으로 이동 |
-| 색인 큐 | `bridge rag/indexer.ts`·`worker.ts` | enqueue·resume·runJob·providerFor·settingsChanged·markStale에서 `assertIndexAllowed` |
-| 라우터 | `bridge rag/codebaseRetrieval.ts` + core `rag/router.ts` | 코드베이스 id는 `retrieveFrom`(벡터/FTS)으로 보내지 않음 |
-| MCP | `bridge kbTools/service.ts` | 코드베이스에 `indexedSearch` 금지, agentic 도구로만 |
+## 4. 팝업 로딩 (ADR-139)
 
-정량 확인(평가 하네스): 코드베이스 임베딩 호출 0, 코드베이스 색인 파일 0, 코드베이스 enqueue 거부.
+- `tree(id, dir)`는 **한 단계만** 읽는다. 폴더가 먼저 오고, 항목마다 `source`(clone이면 Pull 버튼 표시)가 붙는다.
+- 팝업을 열면 목록(캐시된 통계)만 부른다. 상세 화면은 `tree(id, '')`, 폴더를 클릭하면 `tree(id, 'a/b')`를 부른다. 읽는 동안 스피너를 보인다.
+- 늦게 도착한 응답은 버린다(`levelSeq`). 선택한 KB나 폴더가 바뀐 뒤 도착한 결과는 반영하지 않는다.
 
-## 4. Codebase — Agentic 검색 (`packages/bridge/src/codebase/*`)
+## 5. Agentic 탐색 도구 (bridge `kbTools/*`, core `rag/tools.ts`)
 
-- **대상 결정** (`target.ts`): 연결 폴더는 realpath로 고정, 그 밖으로 나가는 경로·심볼릭 링크는 따라가지 않음(`openSafe`). 경로는 `isKnowledgePath`로 `..`·절대 경로·제어 문자 거부.
-- **파일 목록** (`listing.ts`): git 저장소면 `git -c core.fsmonitor=false -c core.hooksPath=/dev/null ls-files`(고정 인자, 셸 없음, `GIT_CONFIG_NOSYSTEM=1`·`GIT_TERMINAL_PROMPT=0` — 저장소 설정이 프로그램을 실행하지 못함), 아니면 디렉터리 순회 + `.gitignore`. 기본 제외(`DEFAULT_CODEBASE_EXCLUDES`: node_modules, dist, build, .git …) + 사용자 제외 + 바이너리(`BINARY_EXTS`)·대용량 제외.
-- **단계**: 질문 → 낱말(`terms.ts`, 식별자 분해·한국어 어미 정리) → 경로/파일명 점수 → 내용 grep(리터럴 기본. 정규식은 길이 상한·역참조 금지·반복 그룹 안 한정자/선택 금지·긴 반복 2개(넓은 원자 1개) 상한·인접 겹침 반복 금지로 역추적 폭주 차단. 리터럴은 줄당 4000자, 사용자 정규식은 줄당 300자, 파일당 200ms·grep 전체 5초 상한) → 정의 패턴(`defs.ts`, 언어 무관 정규식) → 일치 줄 주변 부분 읽기(`read.ts`).
-- **상한** (`CODEBASE_LIMITS`): 결과 수·파일당 읽기 크기·전체 스캔 바이트·시간. `AbortSignal`로 취소.
-- **최신성**: 색인이 없으므로 매 검색이 실제 파일을 읽는다. 저장 직후 바뀐 코드가 바로 검색된다.
-- **안내 문서 신뢰 경계**: INFO.md(사용자 작성) > README > AGENTS.md/CLAUDE.md 순 힌트. 모두 `<kb_content>` 데이터로만 전달하며 지시로 따르지 않는다. INFO.md가 없어도 정상 탐색. 앱은 사용자 파일을 만들거나 덮어쓰지 않는다(폴더 정보는 `<kb>/meta/`).
-- **CLI 연결**: Claude/Codex CLI에는 MCP "octobooks" 서버의 읽기 전용 도구만 준다. 쓰기·셸 권한을 추가로 주지 않는다.
-
-## 5. Document — 하이브리드 검색 (`packages/bridge/src/rag/*`)
-
-```
-원본(PDF/TXT/MD…) → 파싱(페이지·제목·표·코드 블록 보존, 스캔 PDF는 scanned_pdf 오류)
- → 구조적 청킹(제목·문단·섹션·표·코드 경계, 부모-자식 청크)
- → FTS5(BM25, unicode61 + core `tokenize`의 한국어 2-gram 보강) ┐
- → 벡터(BLOB, 공급자 추상)                          ┘→ RRF → (rerank 확장 지점) → 원문 재확인·부모 문맥 확장 → Context Builder
-```
-
-- **임베딩 공급자**: `none` / `local-hash`(신규 문서 KB 기본, 외부 전송·키 불필요) / `openai`(선택). 특정 서비스 키를 강제하지 않는다. 벡터가 꺼지거나 실패해도 BM25 키워드 검색은 계속된다(notice `keyword_only`).
-- **청크 메타**: kbId·documentId·chunkId·원본 경로·문서 제목·페이지·섹션·위치·파일 해시·색인 형식 버전(`INDEX_FORMAT_VERSION`)·임베딩 모델 id.
-- **저장소**: 기존 SQLite(FTS5 + 벡터 BLOB)를 유지 — 새 DB·서버 없음. 벡터 저장소를 바꿀 때는 `rag/sqliteRepository.ts`(저장)와 `embedderFor`(임베딩)만 교체한다. 도메인·세션 코드는 `retrieveForChat`/라우터 경계 뒤에 있어 영향이 없다.
-
-## 6. 색인 관리 (문서형만)
-
-| 기능 | API |
+| 도구 | 용도 |
 |---|---|
-| 생성·증분(해시 비교로 변경 파일만) | 파일 추가/변경 시 자동 enqueue |
-| 실패 재시도 | `reindex(id, { retryFailed: true })` |
-| 부분 재색인 | `reindex(id, { paths: [...] })` |
-| 전체 재생성 | `reindex(id, { full: true })` — `index.next.sqlite`에 새로 만들고 성공하면 교체, 이전 색인 삭제(원본 무관) |
-| 무결성 검사 | `verifyIndex(id)` → `IndexIntegrityReport` |
-| 모델·설정 변경 | 설정이 바뀌면 stale 표시 → 재색인 |
-| 형식 버전 | `INDEX_FORMAT_VERSION` 불일치 시 재생성 |
-| 취소 | 진행 중 작업 취소, 상태 `cancelled` |
-| 재시작 복구 | 앱 시작 시 `indexer.resume()`이 미완료 작업 재개 |
-| 상태·오류 | `KnowledgeIndexState` → `knowledgeReadiness()` (Empty·Loading·Ready·Indexing·Partially Ready·Failed·Rebuilding·Cancelled + 원인·조치) |
+| `listKnowledgeDirectory` | 폴더 한 단계 보기 |
+| `findFiles` | 파일 이름이나 glob으로 찾기 |
+| `grepKnowledge` | 내용 검색. PDF는 추출한 텍스트에서 찾는다 |
+| `findDefinitions` | 함수, 클래스 같은 심볼 정의 찾기 |
+| `getKnowledgeOutline` | 파일 하나의 구조(제목, 심볼) 보기 |
+| `readKnowledgeFile` | 줄 범위를 지정해 읽기 |
 
-## 7. Knowledge Router · Context Builder
+- MCP 서버는 세션에 연결된 KB id만 허용한다. KB를 여러 개 연결하면 모두 탐색한다.
+- 결과는 `<kb_content>` 데이터로 감싼다. PDF 결과의 경로는 원래 PDF 경로를 쓴다.
+- 답변 trace(`Message.ragTrace = { toolCalls }`)에는 KB 도구 호출 수만 남긴다. UI는 0보다 클 때 "지식베이스 탐색 N회"를 보인다.
 
-- `routeKnowledge(kbs, question)`: 코드베이스 → `agentic`, 문서·미분류 → `hybrid`. 둘 다 있으면 **항상 둘 다** 검색하고 `queryIntentOf`(code/document/both)는 예산 비율(`splitBudget`)만 바꾼다 — 모호한 질문에서 한 엔진을 버리지 않는다.
-- 혼합 결과는 `kbTools/merge.ts`의 공정 병합(양쪽에 결과가 있으면 코드베이스 몫 ceil(limit/2) 예약, 번갈아 채움, 남는 자리는 넘김).
-- `buildKnowledgeContext`: 중복 제거(`dedupeEvidence`) → 관련성 필터 → 문맥 확장 → 버전 충돌(`findVersionConflicts`, notice `version_conflict`) → 토큰 예산 → 출처 보존.
-- 출처 표기 `citationLocation`: 코드 `path:시작-끝줄`, PDF `문서명 p.N`.
+## 6. 조건부 사용 (ADR-137)
 
-## 8. 기본 스킬 "지식베이스 탐색" (`skill-knowledge`)
+- 질문마다 미리 검색하던 `retrieveForChat`를 없앴다.
+- bridge 안내문, 도구 안내, 기본 스킬 세 곳에 같은 규칙을 넣었다.
+  - 연결된 KB 목록(이름, 설명)을 알려 준다.
+  - **질문이 그 자료의 내용을 요구할 때만** 도구를 쓴다.
+  - 일정, 타이머, 예약, 퀴즈 출제 요청, 잡담, 일반 지식 질문에는 쓰지 않는다. 예를 들어 "5분 뒤 퀴즈 내줘"에는 쓰지 않는다.
+- 이 규칙은 모델에 주는 안내다. 코드로 강제하지는 않는다.
 
-- 정의: core `skills.ts`(`KNOWLEDGE_SKILL_ID`), 프롬프트 `i18n/locales/*/skillsBuiltin.json`의 `knowledge`(5개 언어). 구버전 프롬프트는 `skillsLegacy.ts`로 식별해 사용자가 고치지 않은 경우만 새 프롬프트로 올린다.
-- 동작: 세션 연결 KB와 유형 확인 → 의도 판단 → 코드베이스는 `findFiles`·`grepKnowledge`·`findDefinitions`·`readKnowledgeFile(startLine,endLine)`로 반복 탐색, 문서는 `searchKnowledge`(하이브리드) → 원문 확인 → 출처와 함께 답변. 코드베이스에 벡터 검색을 부르지 않는다.
-- 도구 안내: core `rag/tools.ts`. MCP 서버는 세션에 연결된 KB id만 허용하고 모든 결과를 데이터로 감싼다.
-- 실패 처리: 결과 없음·연결 폴더 없음(`codebase_missing`)·키워드 전용(`keyword_only`)을 notice로 돌려 프롬프트가 사실대로 알리게 한다.
+## 7. 기본 스킬 "지식베이스 탐색" (`skill-knowledge`)
 
-## 9. API / IPC (렌더러 `DesktopKnowledgeApi`, core `bridge/desktop.ts`)
+- 프롬프트는 `i18n/locales/*/skillsBuiltin.json`의 `knowledge`에 5개 언어로 있다.
+- 사용자가 고치지 않은 구버전 프롬프트는 `skillsLegacy.ts`가 새 프롬프트로 바꾼다.
+- 탐색 순서:
+  1. 연결된 KB 폴더를 확인한다.
+  2. `findFiles`, `grepKnowledge`, `findDefinitions`로 후보를 찾는다.
+  3. `readKnowledgeFile`로 원문을 확인한다.
+  4. 출처 경로와 함께 답한다.
 
-`create(name, { kind, description, linkedPath, excludes })`, `pickFolder()`, `inspectFolder(path)` → `KnowledgeFolderInspection`,
-`setKind(id, kind)`, `setExcludes(id, patterns)`, `reindex(id, { full, paths, retryFailed })`, `verifyIndex(id)`, `restoreIndexBackup(id)`,
-기존 `list/rename/remove/addFiles/addFolder/addGithub/addLink/preview/indexState/retrieve`.
-main은 모든 인자(id 형식·경로·패턴 수·유형)를 `kbGuard.ts`에서 다시 검증한다. 렌더러에 Node 권한은 없다.
+## 8. API / IPC (core `bridge/desktop.ts` `DesktopKnowledgeApi`)
 
-## 10. 마이그레이션 (`bridge knowledgeMigration.ts`, ADR-132)
+```
+list · create(name, { description }) · rename · setDescription · remove
+tree(id, dir) · pathForFile · addPaths · addFiles · pickFiles · addLink
+cloneGit(id, url, { mode: 'clone' | 'zip' }) · pullGit(id, path)
+removeEntry · preview · open · onProgress · cancel
+```
 
-- 앱 시작 시 `indexer.resume()` 전에 실행. 마커 `<knowledge>/.kb-migration.json`(버전 `kb-types-1`), 오류가 0이고 meta.json을 읽지 못해 건너뛴 KB 폴더도 0일 때만 기록 → 아니면 다음 시작에 다시 시도. 여러 번 돌려도 결과가 같다(멱등, 중복 생성 0).
-- `kind` 없는 KB마다 `classifyLegacyKnowledge`: 확실하면 kind 기록(`migratedFrom: { version, at, reason }`), 불확실하면 **그대로 둔다**(미분류, 문서형 동작 유지, UI가 추정만 표시).
-- 코드베이스로 확정된 KB의 `index*.sqlite`는 삭제하지 않고 `<kb>/backup/<ts>/`로 **이동** + manifest. 색인 파일은 해당 KB 폴더(`<kbId>/`) 바로 아래의 `index*.sqlite`만 대상이며(소유 = KB id), 색인기 핸들을 먼저 놓은 뒤 옮긴다. `restoreIndexBackup(id)`로 되돌린다(대상에 색인 파일이 이미 있으면 덮어쓰지 않고 거부). `setKind`는 meta를 먼저 저장하고 색인을 옮기며, 이동 실패 시 meta를 되돌린다. `updateSource`는 직렬 잠금 안에서 KB 존재·유형 불변을 다시 확인한다.
-- 원본 파일·세션 연결(`knowledgeIds`)·학습 이력은 건드리지 않는다. 문서 KB의 기존 색인은 그대로 재사용한다.
+- main은 모든 인자를 `kbGuard.ts`에서 다시 검증한다(id 형식, 경로, 모드, 설명).
+- 원격 sync RPC는 같은 이름의 `knowledge.<method>`다. git 작업은 UI에서 11분까지 기다린다.
 
-## 11. 보안
+## 9. 보안
 
-- KB 내용은 항상 `<kb_content>` 데이터. 문서 안 지시문(프롬프트 인젝션)은 따르지 않도록 스킬·시스템 프롬프트에 명시하며, 도구 자체가 읽기 전용이라 권한을 바꿀 수 없다.
-- 경로 순회·심볼릭 링크 탈출·명령 인젝션 차단(셸 미사용, 고정 인자). 비밀 값(API 키)은 로그에 남기지 않는다.
+- KB 내용은 데이터로만 다룬다. 문서 안에 있는 지시문은 따르지 않는다. 도구는 읽기 전용이다.
+- 경로 순회, 심볼릭 링크 탈출, 명령 인젝션을 막는다(셸을 쓰지 않고 인자를 고정한다). 비밀 값은 로그에 남기지 않는다.
 
-## 12. 원격 지식팩 확장 지점 (이번 범위 밖)
+## 10. 사용법
 
-서버·다운로드는 구현하지 않았다. 확장 지점: (1) `KnowledgeKind`별 정책은 `searchPolicyOf` 한 곳 — 팩도 같은 두 유형을 따른다, (2) 색인은 파생 데이터이므로 팩은 원본+meta만 배포하고 문서 색인은 받는 쪽에서 만든다(형식 버전·임베딩 모델 id로 호환 판단), (3) 코드베이스 팩은 색인 없이 파일만 받으면 바로 검색된다. 상세는 `docs/knowledge-pack-architecture.md`.
-
-## 13. 사용법 (사용자)
-
-1. 지식베이스 → **새로 만들기** → 유형 선택.
-   - **코드베이스**: 폴더(또는 GitHub 주소) 선택 → 구조 미리보기 → 이름·설명·제외 경로 → 완료. 색인 없이 바로 검색된다.
-   - **문서**: 파일·폴더 선택 또는 끌어 놓기 → 목록·크기·중복 확인 → 완료. 색인 진행률이 보이고 끝나면 Ready.
-2. 상세 화면의 **검색 테스트**에 질문을 넣어 결과(파일·줄/페이지·검색 방식)를 확인하고 원본을 연다.
-3. 학습 세션의 지식베이스 선택에서 여러 KB(코드베이스+문서)를 함께 연결한다.
-4. 색인 문제: 상세 화면에서 **실패만 다시**, **전체 다시 만들기**, **무결성 검사**. 색인을 다시 만들어도 원본은 지워지지 않는다.
-5. 미분류 KB는 목록에 "유형 선택 필요"가 표시된다. 유형을 고르면 그 정책이 적용된다(코드베이스로 바꾸면 기존 색인은 backup으로 옮겨진다).
+1. 학습 헤더의 **지식베이스** → **새 지식베이스**: 이름과 설명(선택)을 넣는다.
+2. 상세 화면 위쪽에서 자료를 넣는다.
+   - 파일을 끌어 놓거나 **파일 선택**을 누른다.
+   - GitHub 주소를 넣고 **clone** 또는 **ZIP 다운로드**를 고른다.
+   - 링크 URL을 넣는다.
+3. 아래쪽 파일 목록에서 폴더를 눌러 들어가고, 브레드크럼으로 돌아온다. 항목마다 삭제할 수 있다. clone 저장소에는 **Pull** 버튼이 있다.
+4. 설명은 상세 화면 머리글에서 바로 고친다.
+5. 목록에서 KB 이름을 누르면 지금 학습에 연결하거나 해제한다. 여러 KB를 연결할 수 있다.

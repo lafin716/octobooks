@@ -5,16 +5,11 @@ import type { MessageKey } from '../i18n';
  * main은 정책 위반을 `kb-guard:<code>: <개발자용 설명>`, 인자 검증 실패를 `kb-arg:<field>`로 보낸다.
  * Electron은 여기에 `Error invoking remote method '...': Error: ` 접두어를 붙이므로 메시지 어디서든 찾는다.
  */
-export type KbGuardCode = 'codebase_index_forbidden' | 'linked_kind_locked' | 'folder_not_allowed' | 'kb_meta_unreadable';
+export type KbGuardCode = 'folder_not_allowed' | 'kb_meta_unreadable';
 
 export type KbErrorCode = KbGuardCode | 'arg';
 
-const GUARD_CODES: readonly KbGuardCode[] = [
-  'codebase_index_forbidden',
-  'linked_kind_locked',
-  'folder_not_allowed',
-  'kb_meta_unreadable',
-];
+const GUARD_CODES: readonly KbGuardCode[] = ['folder_not_allowed', 'kb_meta_unreadable'];
 
 // 가드 코드는 소문자, 인자 필드는 kbId·kbPath처럼 대문자를 포함할 수 있다
 const MARK = /(?:^|[\s:])kb-(guard|arg):([A-Za-z_.]+)/;
@@ -42,14 +37,6 @@ export function kbArgField(e: unknown): string | null {
 
 /** 코드별 원인·해결 문구 키. 키를 리터럴로 적어 MessageKey 검사를 받는다 */
 const GUIDE: Record<KbErrorCode, { cause: MessageKey; fix: MessageKey }> = {
-  codebase_index_forbidden: {
-    cause: 'knowledge.guard.codebase_index_forbidden.cause',
-    fix: 'knowledge.guard.codebase_index_forbidden.fix',
-  },
-  linked_kind_locked: {
-    cause: 'knowledge.guard.linked_kind_locked.cause',
-    fix: 'knowledge.guard.linked_kind_locked.fix',
-  },
   folder_not_allowed: {
     cause: 'knowledge.guard.folder_not_allowed.cause',
     fix: 'knowledge.guard.folder_not_allowed.fix',

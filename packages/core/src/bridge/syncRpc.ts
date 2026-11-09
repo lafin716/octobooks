@@ -4,7 +4,7 @@
  * 여기서는 메서드 허용 목록·인자 형태·업로드 조립만 다룬다. 내용 검증(경로·URL·id)은 PC main IPC가 다시 한다.
  */
 import { base64ToBytes, bytesToBase64 } from '../backup/crypto';
-import { isKnowledgeId, isKnowledgePath, KNOWLEDGE_LIMITS, KNOWLEDGE_NAME_MAX } from '../knowledge';
+import { isGitImportMode, isKnowledgeId, isKnowledgePath, KNOWLEDGE_LIMITS, KNOWLEDGE_NAME_MAX } from '../knowledge';
 import { SCHEDULE_LIMITS } from '../schedules';
 import { isSkillRef } from '../skills';
 
@@ -42,19 +42,11 @@ export const SYNC_RPC_METHODS = [
   'knowledge.tree',
   'knowledge.addLink',
   'knowledge.cloneGit',
+  'knowledge.pullGit',
   'knowledge.removeEntry',
   'knowledge.preview',
   'knowledge.cancel',
   'knowledge.setDescription',
-  'knowledge.indexStates',
-  'knowledge.reindex',
-  'knowledge.cancelIndex',
-  'knowledge.docs',
-  'knowledge.getIndexSettings',
-  'knowledge.setIndexSettings',
-  'knowledge.sources',
-  'knowledge.updateSource',
-  'knowledge.source',
   'knowledge.upload',
 ] as const;
 export type SyncRpcMethod = (typeof SYNC_RPC_METHODS)[number];
@@ -76,7 +68,7 @@ export class SyncRpcFailure extends Error {
 }
 
 /** PC → 전체 방송 주제 */
-export const SYNC_EVENT_TOPICS = ['schedules', 'prompts', 'knowledge', 'knowledge.progress', 'knowledge.index'] as const;
+export const SYNC_EVENT_TOPICS = ['schedules', 'prompts', 'knowledge', 'knowledge.progress'] as const;
 export type SyncEventTopic = (typeof SYNC_EVENT_TOPICS)[number];
 
 /** host.info 응답 */
@@ -113,6 +105,7 @@ const kb: Check = isKnowledgeId;
 const kbPath: Check = isKnowledgePath;
 const kbDest: Check = (v) => v === '' || isKnowledgePath(v);
 const url = str(2048);
+const gitOpts: Check = (v) => plainObject(v) && ((v as { mode?: unknown }).mode === undefined || isGitImportMode((v as { mode?: unknown }).mode));
 const plainObject: Check = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const int = (min: number, max: number): Check => (v) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -139,22 +132,14 @@ const SPECS: Record<SyncRpcMethod, readonly Check[]> = {
   'knowledge.create': [nonEmpty(KNOWLEDGE_NAME_MAX * 2)],
   'knowledge.rename': [kb, nonEmpty(KNOWLEDGE_NAME_MAX * 2)],
   'knowledge.remove': [kb],
-  'knowledge.tree': [kb, opt(kbDest)],
+  'knowledge.tree': [kb, kbDest],
   'knowledge.addLink': [kb, url],
-  'knowledge.cloneGit': [kb, url],
+  'knowledge.cloneGit': [kb, url, opt(gitOpts)],
+  'knowledge.pullGit': [kb, kbPath],
   'knowledge.removeEntry': [kb, kbPath],
   'knowledge.preview': [kb, kbPath],
   'knowledge.cancel': [],
   'knowledge.setDescription': [kb, str(500)],
-  'knowledge.indexStates': [opt((v) => Array.isArray(v) && v.length <= 500 && v.every(isKnowledgeId))],
-  'knowledge.reindex': [kb, opt((v) => plainObject(v) && ((v as { full?: unknown }).full === undefined || typeof (v as { full?: unknown }).full === 'boolean'))],
-  'knowledge.cancelIndex': [kb],
-  'knowledge.docs': [kb, opt(str(200))],
-  'knowledge.getIndexSettings': [kb],
-  'knowledge.setIndexSettings': [kb, (v) => plainObject(v) && JSON.stringify(v).length <= 4000],
-  'knowledge.sources': [kb],
-  'knowledge.updateSource': [kb, (v) => typeof v === 'string' && /^[a-z0-9]{6,40}$/.test(v)],
-  'knowledge.source': [kb, (v) => typeof v === 'string' && v.length > 0 && v.length <= 200 && !/[\\/]/.test(v) && v !== '.' && v !== '..'],
   // kbId, uploadId, name, index, total, size, data, dest?
   'knowledge.upload': [
     kb,

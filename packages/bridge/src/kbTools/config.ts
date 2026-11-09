@@ -21,23 +21,6 @@ const pathSchema = { type: 'string', description: 'Relative path inside the know
 
 export const KB_TOOL_DEFINITIONS = [
   {
-    name: 'searchKnowledge',
-    description:
-      'Keyword search across the selected knowledge bases. Document bases use their index; codebase bases are searched by scanning the live files (no index). Returns ranked excerpts with paths and line ranges.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', maxLength: KB_TOOL_LIMITS.queryMaxChars },
-        kbIds: { type: 'array', items: kbIdSchema, maxItems: KB_TOOL_LIMITS.maxKbIds },
-        limit: { type: 'integer', minimum: 1, maximum: KB_TOOL_LIMITS.searchMaxLimit },
-        pathPrefix: pathSchema,
-      },
-      required: ['query'],
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: true, title: 'Search knowledge' },
-  },
-  {
     name: 'listKnowledgeDirectory',
     description: 'List files and folders in one folder of a knowledge base. Pass nextCursor back as cursor for more.',
     inputSchema: {

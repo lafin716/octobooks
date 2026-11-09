@@ -5,12 +5,8 @@ import {
   defaultNameFromPath,
   filterBases,
   findDuplicates,
-  groupByKind,
-  methodKey,
   sortBases,
   formatSize,
-  hitLocation,
-  relevancePercent,
   validTime,
   middleEllipsis,
 } from '../src/knowledge/kbModel';
@@ -24,16 +20,15 @@ const kb = (over: Partial<KnowledgeBase> & { id: string; name: string }): Knowle
 });
 
 const bases = [
-  kb({ id: 'a', name: 'Kubernetes 소스', kind: 'codebase', linkedPath: '/src/k8s', totalBytes: 900, updatedAt: 3 }),
-  kb({ id: 'b', name: '배포 문서', kind: 'document', description: '팀 배포 절차', totalBytes: 100, updatedAt: 1 }),
+  kb({ id: 'a', name: 'Kubernetes 소스', linkedPath: '/src/k8s', totalBytes: 900, updatedAt: 3 }),
+  kb({ id: 'b', name: '배포 문서', description: '팀 배포 절차', totalBytes: 100, updatedAt: 1 }),
   kb({ id: 'c', name: '미정', totalBytes: 500, updatedAt: 2 }),
 ];
 
 describe('filterBases', () => {
-  it('유형 필터를 적용한다', () => {
-    expect(filterBases(bases, { filter: 'codebase' }).map((k) => k.id)).toEqual(['a']);
-    expect(filterBases(bases, { filter: 'document' }).map((k) => k.id)).toEqual(['b']);
-    expect(filterBases(bases, { filter: 'all' })).toHaveLength(3);
+  it('검색어가 없으면 전부 돌려준다', () => {
+    expect(filterBases(bases, {})).toHaveLength(3);
+    expect(filterBases(bases, { query: '  ' })).toHaveLength(3);
   });
   it('이름·설명·연결 경로에서 모든 검색어 토막을 찾는다', () => {
     expect(filterBases(bases, { query: '배포 절차' }).map((k) => k.id)).toEqual(['b']);
@@ -48,23 +43,6 @@ describe('sortBases', () => {
     expect(sortBases(bases, 'size').map((k) => k.id)).toEqual(['a', 'c', 'b']);
     expect(sortBases(bases, 'name').map((k) => k.name)).toHaveLength(3);
     expect(bases[0]?.id).toBe('a');
-  });
-});
-
-describe('groupByKind', () => {
-  it('코드베이스·문서·미분류로 나눈다', () => {
-    const g = groupByKind(bases);
-    expect(g.codebase.map((k) => k.id)).toEqual(['a']);
-    expect(g.document.map((k) => k.id)).toEqual(['b']);
-    expect(g.unclassified.map((k) => k.id)).toEqual(['c']);
-  });
-});
-
-describe('methodKey', () => {
-  it('코드베이스는 직접 탐색, 나머지는 하이브리드', () => {
-    expect(methodKey('codebase')).toBe('agentic');
-    expect(methodKey('document')).toBe('hybrid');
-    expect(methodKey(undefined)).toBe('hybrid');
   });
 });
 
@@ -101,28 +79,6 @@ describe('formatSize', () => {
     expect(formatSize(512)).toBe('512 B');
     expect(formatSize(2048)).toBe('2.0 KB');
     expect(formatSize(5 * 1024 * 1024)).toBe('5.0 MB');
-  });
-});
-
-describe('hitLocation', () => {
-  const base = { path: 'pkg/sched/queue.go', title: 'queue.go', headingPath: [] };
-  it('코드는 path:줄 범위로 보인다', () => {
-    expect(hitLocation({ ...base, lineStart: 10, lineEnd: 24 }, true)).toBe('pkg/sched/queue.go:10-24');
-    expect(hitLocation({ ...base, lineStart: 7, lineEnd: 7 }, true)).toBe('pkg/sched/queue.go:7');
-    expect(hitLocation({ ...base }, true)).toBe('pkg/sched/queue.go');
-  });
-  it('문서는 문서명과 쪽 번호로 보인다', () => {
-    expect(hitLocation({ ...base, title: '운영 가이드', page: 3 }, false)).toBe('운영 가이드 p.3');
-    expect(hitLocation({ ...base, title: '운영 가이드' }, false)).toBe('운영 가이드');
-  });
-});
-
-describe('relevancePercent', () => {
-  it('0~1 점수를 0~100 정수로 바꾸고 범위를 벗어나면 자른다', () => {
-    expect(relevancePercent(0.876)).toBe(88);
-    expect(relevancePercent(1.4)).toBe(100);
-    expect(relevancePercent(-0.2)).toBe(0);
-    expect(relevancePercent(Number.NaN)).toBe(0);
   });
 });
 

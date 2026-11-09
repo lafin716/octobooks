@@ -86,6 +86,7 @@
     "badPath": "Invalid item path",
     "badUrl": "Invalid web address (only http or https)",
     "badRepo": "Invalid GitHub repository address",
+    "badDescription": "Description must be a string of 500 characters or fewer",
     "privateHost": "Internal network addresses cannot be fetched",
     "fetchFailed": "Could not fetch the web page",
     "notHtml": "Not a web page or text, so it cannot be fetched",
@@ -99,18 +100,14 @@
     "cloneStalled": "The repository stopped responding. Check your network and try again",
     "cloneTimeout": "The repository took too long to download",
     "openFailed": "Could not open the folder: {error}",
-    "systemNote": "This study has a knowledge base (reference files) attached. Its folder's absolute path is {dir}. The current working folder is NOT the knowledge base, so always pass this absolute path as the path for Glob and Grep and in Read file paths. Before answering, find and read the relevant files with the tools, base your answer on their contents, and cite the file paths you used. Source code is written in English, so grep with English identifiers, function names and keywords (e.g. restart, replica, sync) even when the question is in another language. If you cannot find it, say so. Folder outline (partial, folders end with /):\n{outline}",
-    "codexIndex": "Knowledge base folder outline (partial, folders end with /):\n{outline}\nIn this answer you cannot open or search knowledge base files directly. If <documents> excerpts are provided, answer from them and cite their numbers. If the excerpts do not contain the answer, say it was not found in the knowledge base excerpts and suggest paths from the outline above to look at. You may mention that switching to the Claude provider lets the assistant read the files directly.",
     "repoNotFound": "Repository not found. Check the address and make sure it is public",
-    "index": {
-      "diskFull": "Not enough free disk space to build the index",
-      "embedFailed": "Stopped indexing because embeddings could not be created: {message}",
-      "fileTooLarge": "File is too large and was left out of the index",
-      "keyMissing": "No OpenAI API key, so embeddings cannot be created. Set a key or choose local embeddings",
-      "pdfUnavailable": "Could not read PDF text, so the file was left out"
-    },
-    "badSettings": "Invalid index settings",
     "diskLow": "Not enough free disk space to add items",
-    "sourceNoOrigin": "Files uploaded directly cannot be fetched again from a source"
+    "linkedReadOnly": "This linked-folder knowledge base is read-only, so its files cannot be changed",
+    "badMode": "Invalid import mode",
+    "pullNotClone": "Only repositories imported with git clone can be pulled",
+    "archiveTooLarge": "The archive is too large to import",
+    "archiveFormat": "The archive format is invalid",
+    "archiveTooMany": "The archive contains too many entries",
+    "archiveEscape": "The archive contains a disallowed path, so it was not imported"
   }
 }

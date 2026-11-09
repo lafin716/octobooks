@@ -8,17 +8,17 @@ const t = echo as Parameters<typeof kbErrorGuide>[1];
 describe('parseKbError', () => {
   it('Electron 접두어가 붙은 kb-guard 코드를 꺼낸다', () => {
     const e = new Error(
-      "Error invoking remote method 'knowledge:setKind': Error: kb-guard:linked_kind_locked: linked codebase kb1 cannot become a document knowledge base",
+      "Error invoking remote method 'knowledge:create': Error: kb-guard:folder_not_allowed: 허용되지 않은 폴더",
     );
-    expect(parseKbError(e)).toBe('linked_kind_locked');
+    expect(parseKbError(e)).toBe('folder_not_allowed');
   });
   it('접두어 없는 메시지와 문자열도 읽는다', () => {
-    expect(parseKbError(new Error('kb-guard:codebase_index_forbidden: reindex is not allowed'))).toBe('codebase_index_forbidden');
+    expect(parseKbError(new Error('kb-guard:kb_meta_unreadable: x'))).toBe('kb_meta_unreadable');
     expect(parseKbError('kb-guard:folder_not_allowed: x')).toBe('folder_not_allowed');
   });
   it('kb-arg 인자 오류는 모두 arg로 본다', () => {
     expect(parseKbError(new Error("Error invoking remote method 'knowledge:create': Error: kb-arg:linkedPath"))).toBe('arg');
-    expect(parseKbError(new Error('kb-arg:reindex.paths'))).toBe('arg');
+    expect(parseKbError(new Error('kb-arg:tree.dir'))).toBe('arg');
   });
   it('대문자가 든 인자 필드(kbId·kbPath·kbName)도 arg로 본다', () => {
     expect(parseKbError(new Error('kb-arg:kbId'))).toBe('arg');
@@ -26,11 +26,12 @@ describe('parseKbError', () => {
   });
   it('kbArgField는 인자 필드 이름을 돌려준다', () => {
     expect(kbArgField(new Error('Error: kb-arg:kbName'))).toBe('kbName');
-    expect(kbArgField(new Error('kb-guard:linked_kind_locked: x'))).toBeNull();
+    expect(kbArgField(new Error('kb-guard:folder_not_allowed: x'))).toBeNull();
     expect(kbArgField(new Error('디스크 오류'))).toBeNull();
   });
-  it('모르는 guard 코드나 가드가 아닌 오류는 null', () => {
+  it('폐기된 코드·모르는 guard 코드나 가드가 아닌 오류는 null', () => {
     expect(parseKbError(new Error('kb-guard:made_up_code: x'))).toBeNull();
+    expect(parseKbError(new Error('kb-guard:linked_kind_locked: x'))).toBeNull();
     expect(parseKbError(new Error('디스크 오류'))).toBeNull();
     expect(parseKbError({ message: 'kb-guard:folder_not_allowed: x' })).toBeNull();
     expect(parseKbError(undefined)).toBeNull();

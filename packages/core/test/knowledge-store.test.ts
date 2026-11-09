@@ -4,7 +4,8 @@ import { createAppStore, type AppStore } from '../src/store';
 import { ProviderRegistry, type StreamRequest } from '../src/provider';
 import { mockControl } from '../src/providers/mock';
 import { memoryRepository } from '../src/repo';
-import { KNOWLEDGE_SKILL_ID, defaultSkills, skillsToSeed } from '../src/skills';
+import { KNOWLEDGE_SKILL_ID, LEGACY_KNOWLEDGE_PROMPTS, defaultSkills, skillsToSeed, upgradeBuiltinSkills } from '../src/skills';
+import { KB_TOOLS_GUIDE } from '../src/rag';
 
 const KB = 'kbabc123def';
 
@@ -88,6 +89,34 @@ describe('setSessionKnowledge', () => {
     expect(seen.filter((r) => r.purpose && r.purpose !== 'chat').every((r) => r.knowledgeId === undefined)).toBe(true);
   });
 
+  it('KB가 연결된 대화는 사전 검색 없이 knowledgeIds만 싣고 knowledgeMode는 싣지 않는다', async () => {
+    const seen: StreamRequest[] = [];
+    const store = makeStore(seen);
+    store.getState().setSessionProvider(SEED_IDS.root, 'mock');
+    store.getState().setSessionKnowledge(SEED_IDS.root, KB);
+    store.getState().sendMessage(SEED_IDS.root, '이 코드에서 재시도는 어디서 처리해?');
+    await idle(store);
+    const chat = seen.find((r) => !r.purpose || r.purpose === 'chat')!;
+    expect(chat.knowledgeIds).toEqual([KB]);
+    expect(chat.knowledgeId).toBe(KB);
+    expect('knowledgeMode' in chat).toBe(false);
+  });
+
+  it('KB_TOOLS_GUIDE는 필요할 때만 도구를 쓰라는 규칙과 쓰지 말아야 할 경우를 말한다', () => {
+    expect(KB_TOOLS_GUIDE).toContain('Use knowledge base tools only when the question needs knowledge base content');
+    expect(KB_TOOLS_GUIDE).toContain('Do NOT use them for scheduling, timers, reminders');
+    expect(KB_TOOLS_GUIDE).toContain('small talk or greetings');
+    expect(KB_TOOLS_GUIDE).not.toMatch(/searchKnowledge|vector|embedding/i);
+  });
+
+  it('예전 지식베이스 스킬 지시(ADR-131, 고치지 않은 것)는 새 지시로 올라간다', () => {
+    const cur = defaultSkills(1).find((s) => s.id === KNOWLEDGE_SKILL_ID)!;
+    const legacy = { ...cur, prompt: `${LEGACY_KNOWLEDGE_PROMPTS[5]!}\n`, updatedAt: 1 };
+    const [up, ...rest] = upgradeBuiltinSkills([legacy], 3);
+    expect(rest).toEqual([]);
+    expect(up).toMatchObject({ id: KNOWLEDGE_SKILL_ID, prompt: cur.prompt, updatedAt: 3 });
+  });
+
   it('지식베이스가 없으면 요청에 knowledgeId를 싣지 않는다', async () => {
     const seen: StreamRequest[] = [];
     const store = makeStore(seen);
@@ -103,7 +132,7 @@ describe('지식베이스 기본 스킬', () => {
   it('기본 스킬 목록에 지식베이스 탐색이 있고 기존 사용자에게도 한 번 시드된다', () => {
     const def = defaultSkills(0).find((s) => s.id === KNOWLEDGE_SKILL_ID);
     expect(def).toMatchObject({ name: 'knowledge', title: '지식베이스 탐색', builtin: true });
-    expect(def!.prompt).toContain('Glob');
+    expect(def!.prompt).toContain('listKnowledgeDirectory');
 
     // 이미 예전 기본 스킬을 시드한 사용자: 지식베이스 스킬만 새로 들어간다
     const old = ['skill-curriculum', 'skill-book', 'skill-quiz', 'skill-speak', 'skill-reorganize', 'skill-schedule'];

@@ -11,95 +11,47 @@
     "exitFull": "全画面表示を終了"
   },
   "remote": {
-    "outdated": "このPCでは管理できません",
-    "outdatedHint": "最新のOctoBooksデスクトップアプリに接続すると、ここでもナレッジベースを管理できます。octobooks serve は非対応です。",
+    "outdated": "このPCはここから管理できません",
+    "outdatedHint": "最新のデスクトップ版OctoBooksアプリに接続すると、ここでもナレッジベースを管理できます。octobooks serveはサポートされません。",
     "connecting": "PCに接続しています…",
-    "offline": "PCに接続されていません。接続するとここでナレッジベースを管理できます。",
-    "deleteOff": "PCの設定で遠隔削除がオフになっています。",
-    "noOpen": "フォルダを開けるのはPCアプリだけです。"
+    "offline": "PCに接続されていません。接続されるとここからナレッジベースを管理できます。",
+    "deleteOff": "PCの設定でリモート削除がオフになっています。",
+    "noOpen": "フォルダを開くのはPCアプリでのみできます。"
   },
   "unavailable": {
-    "notice": "この端末ではナレッジベースを使用できません。デスクトップアプリで開いてください。"
+    "notice": "このデバイスではナレッジベースを使えません。デスクトップアプリで開いてください。"
   },
   "list": {
     "heading": "ナレッジベース",
     "empty": "まだナレッジベースがありません。",
-    "emptyHint": "資料をまとめておくと、回答がその中を検索し、パスを引用します。",
+    "emptyHint": "資料をまとめて学習に連携すると、AIが回答時に参照します。",
     "create": "新しいナレッジベース",
-    "linkedBadge": "この学習に接続中",
-    "link": "この学習に接続",
-    "unlink": "接続を解除",
-    "count": "ファイル {count}件",
-    "counting": "ファイルを数えています…",
-    "filter": "種類で絞り込み",
-    "filterAll": "すべて",
+    "linkedBadge": "連携中",
+    "link": "連携",
+    "unlink": "連携解除",
+    "count": "ファイル {count}件 · {size}",
+    "counting": "計算中…",
     "noMatch": "条件に合うナレッジベースがありません。",
     "search": "ナレッジベースを検索",
-    "searchPlaceholder": "名前・説明・パスで検索",
+    "searchPlaceholder": "名前・説明で検索",
     "sort": "並び替え",
     "sortName": "名前順",
     "sortRecent": "最近順",
-    "sortSize": "サイズ順"
+    "sortSize": "サイズ順",
+    "toggleHint": "名前を押すと、この学習に連携/解除します。",
+    "open": "詳細を表示"
   },
   "create": {
     "title": "新しいナレッジベース",
-    "namePlaceholder": "名前（例：細胞生物学の教科書）",
+    "namePlaceholder": "名前（例: 細胞生物学の教科書）",
+    "nameLabel": "名前",
+    "descriptionLabel": "説明（任意）",
+    "descriptionPlaceholder": "例: チームのデプロイ手順ドキュメント集",
+    "descriptionHint": "AIがいつこのナレッジベースを参照するかの判断に使われます。",
     "submit": "作成",
+    "creating": "作成中…",
     "cancel": "キャンセル",
-    "back": "戻る",
-    "kindTitle": "どの種類のナレッジベースを作りますか?",
-    "name": "名前",
-    "description": "説明(任意)",
-    "working": "作成中…",
-    "failed": "作成できませんでした。もう一度お試しください。",
-    "kind": {
-      "codebase": {
-        "title": "コードベース",
-        "desc": "フォルダまたは GitHub リポジトリ。質問するたびに実ファイルを直接探索します。"
-      },
-      "document": {
-        "title": "ドキュメント",
-        "desc": "PDF やドキュメントを索引化し、キーワードと意味で検索します。"
-      }
-    },
-    "codebase": {
-      "notice": "コードベースはインデックスを作らず、質問するたびに実ファイルを直接探索します。",
-      "source": "ソース",
-      "pathLabel": "フォルダパス",
-      "pathPlaceholder": "/パス/プロジェクト",
-      "pickFolder": "フォルダを選択",
-      "gitLabel": "または GitHub リポジトリ",
-      "gitPlaceholder": "owner/repo または https://github.com/owner/repo",
-      "gitHint": "デフォルトブランチの最新ファイルのみ取得します",
-      "inspecting": "フォルダを確認中…",
-      "inspectFailed": "フォルダを読み取れませんでした。パスを確認してください。",
-      "inspected": "ファイル {count} 件 · {size}",
-      "truncated": "ファイルが多いため一部のみ数えました。",
-      "isGit": "Git リポジトリです。",
-      "suggestDocument": "PDF やドキュメント中心のフォルダなら「ドキュメント」で作るのがおすすめです。",
-      "descPlaceholder": "例: 決済モジュールのソース",
-      "excludes": "除外するパス(1行に1つ)",
-      "excludesHint": "node_modules などのビルド・依存フォルダはデフォルトで除外されます。",
-      "submit": "コードベースを作成",
-      "cloneFailed": "リポジトリを取得できませんでした。URL とアクセス権を確認してください。ナレッジベースは作成されました。"
-    },
-    "document": {
-      "pick": "ファイルを選択",
-      "pickFolder": "フォルダを選択",
-      "empty": "ここにファイルやフォルダをドロップ",
-      "count": "{count} 件 · {size}",
-      "listLabel": "追加するファイル一覧",
-      "remove": "一覧から削除",
-      "duplicates": "同じ名前・サイズのファイル {count} 件は除外されます。",
-      "submit": "ドキュメントのナレッジベースを作成",
-      "index": {
-        "label": "索引の方式",
-        "local": "ローカル意味検索(既定)",
-        "none": "キーワードのみ(BM25、意味索引なし)",
-        "openai": "OpenAI 埋め込み(上級、API キーが必要)",
-        "advanced": "詳細設定"
-      }
-    }
+    "failed": "作成できませんでした。もう一度お試しください。"
   },
   "rename": {
     "action": "名前を変更",
@@ -110,306 +62,102 @@
     "action": "ナレッジベースを削除",
     "title": "「{name}」を削除しますか？",
     "message": "中のファイル {count}件も一緒に削除されます。元に戻せません。",
-    "confirm": "削除",
-    "messageUnknown": "中のファイルもすべて一緒に削除されます。元に戻せません。"
+    "messageUnknown": "中のファイルもすべて一緒に削除されます。元に戻せません。",
+    "confirm": "削除"
   },
   "tree": {
     "heading": "ファイル",
-    "empty": "まだファイルがありません。",
+    "empty": "このフォルダは空です。",
     "remove": "削除",
     "removeTitle": "「{name}」を削除しますか？",
-    "removeMessage": "削除したあとは元に戻せません。",
+    "removeMessage": "削除後は元に戻せません。",
     "open": "フォルダを開く",
     "previewEmpty": "ファイルを選ぶと内容を表示します。",
     "binary": "テキストとしてプレビューできないファイルです。",
     "truncated": "先頭部分のみ表示しています。",
-    "expandAll": "すべて展開",
-    "collapseAll": "すべて折りたたむ"
+    "loading": "読み込み中…",
+    "root": "最上位",
+    "breadcrumb": "フォルダの場所"
   },
   "add": {
-    "drop": "ここにファイルやフォルダをドラッグ＆ドロップしてください",
+    "drop": "ここにファイルやフォルダをドロップ",
     "pick": "ファイルを選択",
-    "linkLabel": "Web ページのアドレス",
+    "intoFolder": "{name} フォルダに追加します",
+    "linkLabel": "Webページのアドレス",
     "linkPlaceholder": "https://...",
     "linkSubmit": "取り込む",
-    "gitLabel": "GitHub リポジトリ",
+    "gitLabel": "GitHubリポジトリ",
     "gitPlaceholder": "owner/repo または https://github.com/owner/repo",
-    "gitSubmit": "クローン",
-    "invalidUrl": "http(s) のアドレスのみ使用できます。",
-    "invalidGit": "GitHub リポジトリのアドレスのみ使用できます。",
+    "gitSubmit": "取り込む",
+    "invalidUrl": "http(s)のアドレスのみ使えます。",
+    "invalidGit": "GitHubリポジトリのアドレスのみ使えます。",
     "done": "{count}件を追加しました。",
-    "skipped": "{count}件は、サイズや形式のためスキップしました。",
+    "skipped": "{count}件はサイズや形式のためスキップしました。",
     "failed": "追加できませんでした。もう一度お試しください。",
-    "busyDrop": "まだ取り込み中です。終わってから、もう一度ドロップしてください。",
-    "dropEmpty": "ドロップされた項目からファイルが見つかりませんでした。",
-    "nothing": "追加されたファイルはありません。サイズや形式を確認してください。",
-    "gitHint": "既定のブランチ（main・master など）の最新ファイルのみ取得します",
-    "allDuplicates": "{count}件は既に追加済みのためスキップしました。"
+    "busyDrop": "まだ取り込み中です。終わってからもう一度ドロップしてください。",
+    "dropEmpty": "ドロップした項目からファイルが見つかりませんでした。",
+    "nothing": "追加されたファイルがありません。サイズや形式を確認してください。",
+    "allDuplicates": "{count}件は既にあるファイルのためスキップしました。"
+  },
+  "git": {
+    "modeLabel": "取り込み方法",
+    "clone": "Clone（後でPullで更新）",
+    "zip": "ZIPダウンロード（履歴なし）",
+    "cloneHint": ".gitを残す浅いクローンで取得します。後からPullで最新の内容を取り込めます。",
+    "zipHint": "履歴のない圧縮ファイルとして取得します。更新するには再度ダウンロードが必要です。",
+    "pull": "Pull"
   },
   "error": {
-    "generic": "問題が発生しました。もう一度お試しください。",
-    "badDescription": "説明を確認してください。",
-    "badSettings": "設定値を確認してください。",
-    "badQuery": "検索語を確認してください。",
-    "badId": "ナレッジベースが見つかりません。",
-    "unavailable": "この端末ではナレッジベースを使えません。"
+    "generic": "問題が起きました。もう一度お試しください。"
   },
   "progress": {
-    "label": "取り込みの進捗",
+    "label": "取り込みの進行状況",
     "copy": "ファイルをコピー中…",
-    "copied": "ファイル {count}件をコピーしました（{size}）",
-    "download": "Web ページを取得中…",
-    "clone": "GitHub から取得中…",
+    "copied": "{count}件をコピー済み（{size}）",
+    "download": "Webページを取得中…",
+    "clone": "GitHubから取得中…",
+    "pull": "GitHubから最新の内容を取得中…",
+    "extract": "展開中…",
     "save": "保存中…",
     "elapsed": "{seconds}秒",
     "cancel": "キャンセル",
-    "cancelled": "取り込みを取り消しました。"
-  },
-  "citations": {
-    "label": "出典",
-    "open": "出典 {n}: {title} を開く"
+    "cancelled": "取り込みをキャンセルしました。"
   },
   "source": {
-    "title": "出典を見る",
-    "close": "閉じる",
-    "loading": "原文を読み込んでいます…",
-    "failed": "原文を開けませんでした。{message}",
-    "chunk": "該当箇所",
-    "section": "前後の文脈",
-    "page": "{page}ページ",
-    "line": "{line}行目",
-    "lines": "{start}–{end}行目"
-  },
-  "index": {
-    "empty": "まだ索引がありません",
-    "queued": "索引待ち",
-    "indexing": "索引中 {done}/{total}",
-    "ready": "索引済み · チャンク {count}件",
-    "stale": "ファイルが変わったため再索引が必要です",
-    "error": "索引に失敗しました",
-    "reindex": "再索引",
-    "cancel": "索引をキャンセル"
+    "github": "GitHub",
+    "githubClone": "GitHub · Clone",
+    "githubZip": "GitHub · ZIP",
+    "link": "Web",
+    "legacy": "連携フォルダ（読み取り専用）",
+    "legacyHint": "以前の方法で連携したフォルダです。閲覧のみ可能で、ファイルの追加や削除はできません。"
   },
   "description": {
-    "cancel": "キャンセル",
-    "edit": "編集",
-    "empty": "説明がありません。この知識ベースの内容を書くと検索の精度が上がります。",
     "label": "説明",
-    "placeholder": "例：チームのデプロイ手順書",
-    "save": "保存"
-  },
-  "embedding": {
-    "heading": "埋め込みモデル",
-    "local": "ローカルハッシュ(オフライン、旧既定)",
-    "model": "モデル",
-    "modelDefault": "既定のモデル",
-    "openai": "OpenAI 意味検索",
-    "openaiNotice": "OpenAI を選ぶと、このナレッジベースの文書本文と質問が OpenAI のサーバーに送信されます。機密資料には「ベクトルなし」を使ってください。",
-    "provider": "方式",
-    "reindexNeeded": "モデルが変更されました。検索に反映するには再索引してください。",
+    "placeholder": "例: チームのデプロイ手順ドキュメント集",
+    "edit": "説明を編集",
     "save": "保存",
-    "saved": "埋め込み設定を保存しました。",
-    "none": "ベクトルなし(キーワード・コード・フォルダ検索、既定)",
-    "dimensions": "次元数",
-    "hint": {
-      "none": "API キーなしでキーワード(FTS5)・コードシンボル・ファイルパス・フォルダ情報で検索します。ほとんどの場合これで十分です。",
-      "local-hash": "旧既定値です。評価で品質向上がほぼなかったため、新しいナレッジベースでは使いません。",
-      "openai": "意味が近い文章も探します。索引作成と質問ごとに OpenAI API を呼び出します(設定 › API キーの OpenAI キーを使用)。"
-    },
-    "costEstimate": "索引作成の推定コスト: 約 {tokens} トークン、約 ${usd}(推定、初回のみ。変更されたファイルだけ再送信)"
-  },
-  "rag": {
-    "enabled": "知識ベース検索を使う",
-    "expandParent": "前後の段落も含める",
-    "expandQuery": "根拠が足りないとき、質問を英語のコード検索語に広げて再検索(モデル呼び出し1回追加)",
-    "heading": "検索設定",
-    "maxContextChars": "根拠の最大文字数",
-    "minScore": "最小関連度",
-    "rerank": "検索結果を並べ替える",
-    "reset": "既定値",
-    "save": "保存",
-    "topK": "根拠の件数",
-    "open": "検索設定",
-    "hint": "すべてのナレッジベースに適用されます。",
-    "mode": "検索方式",
-    "debug": "デバッグ: 回答の下に検索段階ごとの時間を表示"
-  },
-  "sources": {
-    "empty": "登録された出典がありません。",
-    "heading": "出典",
-    "type": {
-      "files": "ファイル",
-      "folder": "フォルダ",
-      "github": "GitHub",
-      "web": "Web"
-    },
-    "update": "更新",
-    "updated": "{name} の出典を更新しました。",
-    "updating": "更新中…"
-  },
-  "storage": {
-    "chunks": "チャンク",
-    "docs": "文書",
-    "heading": "保存容量",
-    "index": "索引",
-    "source": "原本"
+    "cancel": "キャンセル",
+    "empty": "説明がありません。書いておくと、AIがいつこのナレッジベースを使うかをより正確に判断できます。"
   },
   "link": {
-    "inherited": "親の枝の知識ベースを使用しています。",
-    "overridden": "この枝は独自の知識ベースを使用しています。",
+    "inherited": "親のブランチのナレッジベースに従っています。",
+    "overridden": "このブランチだけ別のナレッジベースを使っています。",
     "reset": "親に従う"
   },
-  "settings": {
-    "open": "ナレッジベース設定",
-    "title": "ナレッジベース設定",
-    "titleOf": "{name} の設定",
-    "close": "閉じる",
-    "descriptionHint": "資料の内容を説明すると検索の精度が上がります。",
-    "embeddingHint": "モデルを変えると再インデックスが必要です。"
-  },
-  "autoIndex": {
-    "label": "自動インデックス",
-    "hint": "オンにするとファイル追加時にすぐインデックスします。オフなら「再インデックス」を押して実行します。"
-  },
-  "mode": {
-    "auto": "自動",
-    "fast": "高速",
-    "deep": "詳細",
-    "semantic": "意味検索",
-    "hint": {
-      "auto": "ローカル検索の後、根拠が足りないときだけ追加で探します。通常はこれで十分です。",
-      "fast": "ローカル検索のみ。追加のモデル呼び出しや文書探索がなく最速です。",
-      "deep": "より多くの根拠を集め、Codex・Claude が必要な文書の原文を直接読みます。",
-      "semantic": "OpenAI の意味索引があるナレッジベースでは意味でも検索します。なければローカル検索で代替します。"
-    }
-  },
   "trace": {
-    "label": "検索過程",
-    "kbs": "ナレッジベース {n} 件",
-    "docs": "文書 {n} 件",
-    "expanded": "検索語を広げて再検索",
-    "tools": "追加探索 {n} 回",
-    "semantic": "意味検索",
-    "topDocs": "主な文書"
-  },
-  "notice": {
-    "semantic_unavailable": "意味検索の索引がないため、ローカル検索で探しました。",
-    "embed_failed": "意味検索に失敗したため、キーワード検索で探しました。",
-    "insufficient": "ナレッジベースに関連する根拠が見つかりませんでした。",
-    "timeout": "検索がタイムアウトしたため、ナレッジベースの根拠なしで回答しました。",
-    "kb_skipped": "索引のないナレッジベースはスキップしました。",
-    "keyword_only": "埋め込みなしでキーワード検索のみ使いました。",
-    "version_conflict": "資料ごとに異なるバージョンが書かれています。回答のバージョン表記を確認してください。",
-    "codebase_missing": "コードベースのフォルダが見つからないためスキップしました。"
-  },
-  "kind": {
-    "codebase": "コードベース",
-    "document": "ドキュメント",
-    "unclassified": "未分類",
-    "choose": "種類を選んでください",
-    "suggest": "おすすめ: {kind}",
-    "blocked": "フォルダに連携されたコードベースはドキュメントに変更できません。"
-  },
-  "maint": {
-    "heading": "索引の管理",
-    "retryFailed": "失敗した {count} 件を再試行",
-    "retried": "失敗した {count} 件を再索引しています。",
-    "rebuild": "すべて作り直す",
-    "rebuilding": "すべてを作り直しています。",
-    "verify": "索引を検査",
-    "verifyOk": "索引に問題はありません。",
-    "verifyBad": "索引に問題があります。すべて作り直してください。",
-    "restore": "バックアップから復元",
-    "restored": "バックアップから索引を復元しました。",
-    "noBackup": "復元できるバックアップがありません。"
-  },
-  "overview": {
-    "heading": "概要",
-    "kind": "種類",
-    "method": "検索方式",
-    "path": "連携パス",
-    "files": "ファイル",
-    "updated": "更新"
-  },
-  "method": {
-    "agentic": "直接探索(索引なし)",
-    "hybrid": "ハイブリッド検索(ベクトル + キーワード)"
-  },
-  "codebase": {
-    "excludes": "除外リスト",
-    "excludesHint": "保存すると次の質問から新しいリストを使います。再索引は不要です。",
-    "excludesReset": "既定に戻す",
-    "excludesSave": "保存"
-  },
-  "readiness": {
-    "ready": "準備完了",
-    "empty": "空",
-    "loading": "読み込み中",
-    "indexing": "索引中",
-    "rebuilding": "再構築中",
-    "partial": "一部のみ準備完了",
-    "cancelled": "キャンセル済み",
-    "needsKind": "種類の選択が必要",
-    "failed": "失敗"
-  },
-  "cause": {
-    "updating": "ファイルが変わったため最新内容を反映しています。",
-    "last_failed": "前回の処理が失敗しました。",
-    "stale": "ファイルが変わったため再索引が必要です。",
-    "failed_docs": "一部のドキュメントを索引化できませんでした。",
-    "index_error": "索引化中にエラーが発生しました。",
-    "not_indexed": "まだ索引化されていません。",
-    "codebase_missing": "連携フォルダが見つかりません。移動または削除された可能性があります。",
-    "cancelled": "処理はキャンセルされました。",
-    "interrupted": "アプリが終了したため処理が中断されました。",
-    "unknown": "不明な問題が発生しました。"
-  },
-  "fix": {
-    "addFiles": "ファイルを追加してください。",
-    "reindex": "再索引を押してください。",
-    "retryFailed": "失敗したドキュメントだけ再試行してください。",
-    "rebuild": "すべて作り直してください。",
-    "chooseKind": "下から種類を選んでください。",
-    "relink": "フォルダを再接続するか、このナレッジベースを削除して作り直してください。",
-    "openSettings": "設定で確認してください。"
-  },
-  "test": {
-    "heading": "検索テスト",
-    "hint": "質問を1つ入力すると、このナレッジベースから返される根拠を確認できます。回答は生成しません。",
-    "label": "検索クエリ",
-    "placeholder": "Pod Schedulingはどのように動作しますか？",
-    "run": "検索",
-    "running": "検索中…",
-    "cancel": "検索をキャンセル",
-    "cancelled": "検索をキャンセルしました。もう一度検索すると新しい結果が得られます。",
-    "error": "検索に失敗しました。",
-    "unsupported": "このバージョンでは検索テストを利用できません。",
-    "empty": "根拠が見つかりませんでした。質問を変えるか、文書を追加してください。",
-    "count": "根拠 {count}件 · {ms}ms",
-    "results": "検索結果",
-    "relevance": "関連度",
-    "open": "原文を見る",
-    "skipped": "{count}件のナレッジベースをスキップしました（索引なしまたは失敗）"
+    "explored": "ナレッジベースを {count}回 探索"
   },
   "guard": {
-    "codebase_index_forbidden": {
-      "cause": "コードベースのナレッジベースでは、インデックス作成とベクトル検索は使いません。",
-      "fix": "索引と検索を使うには、ドキュメント用のナレッジベースをご利用ください。"
-    },
-    "linked_kind_locked": {
-      "cause": "リンクしたフォルダはドキュメント用のナレッジベースに変更できません。",
-      "fix": "フォルダの内容をコピーした新しいドキュメント用ナレッジベースを作成してください。"
-    },
     "folder_not_allowed": {
-      "cause": "ホームフォルダやシステムフォルダなど、リンクできない場所です。",
-      "fix": "プロジェクトのフォルダを選んで、もう一度リンクしてください。"
+      "cause": "ホームフォルダやシステムフォルダなど、連携できない場所です。",
+      "fix": "プロジェクトのフォルダを選んで、もう一度お試しください。"
     },
     "kb_meta_unreadable": {
-      "cause": "ナレッジベースの情報ファイルを読み込めませんでした。",
-      "fix": "ナレッジベースを削除して、もう一度作成してください。"
+      "cause": "ナレッジベースの情報ファイルを読み取れませんでした。",
+      "fix": "ナレッジベースを削除して、作り直してください。"
     },
     "arg": {
-      "cause": "入力された値が正しくありません。",
+      "cause": "入力値が正しくありません。",
       "fix": "項目を確認して、もう一度お試しください。"
     }
   }

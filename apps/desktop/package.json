@@ -43,8 +43,6 @@
     "npmRebuild": false,
     "asarUnpack": [
       "dist/pdfjs/**",
-      "dist/treesitter/**",
-      "dist/ragWorker.cjs",
       "dist/kbMcp.cjs"
     ],
     "mac": {

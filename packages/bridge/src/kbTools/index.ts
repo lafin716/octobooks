@@ -3,5 +3,4 @@ export { kbToolsNote } from './note';
 export { kbToolNameOf } from '../claude';
 export { createMcpHandler, parseLine, MCP_PROTOCOL_VERSION, type JsonRpcRequest, type JsonRpcResponse } from './mcp';
 export { KbToolService, type KbEntry, type KbToolResult, type KbToolServiceOptions } from './service';
-export { keywordSearch, queryTerms, SEARCH_LIMITS } from './search';
 export { loadKbEntries, serveStdio } from './serve';

@@ -1,5 +1,6 @@
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { PDF_MAX_BYTES, pdfTextFor } from '../kbTools/text';
 import {
   BINARY_EXTS,
   compileExcludes,
@@ -22,6 +23,8 @@ export interface CodebaseTarget {
   root: string;
   /** 사용자 제외 패턴 (cleanExcludes 결과) */
   excludes: string[];
+  /** PDF 본문 텍스트 캐시 폴더 (지식베이스 안, ADR-140). 없으면 PDF는 읽지 않는다 */
+  cacheDir?: string;
 }
 
 export const CODEBASE_LIMITS = {
@@ -83,6 +86,11 @@ export function relPathOf(p: string | undefined): string | undefined {
   }
 }
 
+/** PDF인가 (본문 텍스트로만 읽는다) */
+export function isPdfName(name: string): boolean {
+  return extOf(name) === 'pdf';
+}
+
 /** 파일이 건너뛸 대상인가: 제외 패턴(조상 폴더 포함), 점으로 시작하는 폴더, 민감 env 파일, 바이너리 확장자 */
 export function isSkippedRel(rel: string, matcher: ExcludeMatcher): boolean {
   const segs = rel.split('/');
@@ -92,7 +100,7 @@ export function isSkippedRel(rel: string, matcher: ExcludeMatcher): boolean {
   }
   const name = segs[segs.length - 1] ?? '';
   if (name.startsWith('.env')) return true;
-  if (BINARY_EXTS.has(extOf(name))) return true;
+  if (BINARY_EXTS.has(extOf(name)) && !isPdfName(name)) return true;
   return matcher(rel, false);
 }
 
@@ -122,6 +130,30 @@ export type OpenResult =
   | { ok: true; text: string; buf: Buffer }
   | { ok: false; reason: 'not_found' | 'bad_path' | 'too_large' | 'binary_file' };
 
+/** PDF 본문 텍스트 읽기 (캐시 폴더가 있을 때만). 원본 PDF 경로로 결과를 낸다 */
+async function openPdfText(target: CodebaseTarget, rel: string, real: string, maxBytes: number): Promise<OpenResult> {
+  if (!target.cacheDir) return { ok: false, reason: 'binary_file' };
+  const bytes = await readFileBounded(real, maxBytes);
+  if (!bytes) return { ok: false, reason: 'too_large' };
+  const text = await pdfTextFor(real, rel, target.cacheDir, bytes);
+  if (text === null) return { ok: false, reason: 'binary_file' };
+  return { ok: true, text, buf: Buffer.from(text, 'utf8') };
+}
+
+async function readFileBounded(abs: string, maxBytes: number): Promise<Buffer | undefined> {
+  const fh = await open(abs, 'r').catch(() => undefined);
+  if (!fh) return undefined;
+  try {
+    const st = await fh.stat();
+    if (st.size > maxBytes) return undefined;
+    const buf = Buffer.alloc(st.size);
+    const { bytesRead } = await fh.read(buf, 0, st.size, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
+
 /**
  * 안전하게 연다: 상대 경로 → 심볼릭 링크 아님(lstat) → realpath가 root 안 → 크기 → 바이너리 아님.
  * 링크는 따라가지 않는다 (lstat은 링크 자체를 본다).
@@ -135,9 +167,10 @@ export async function openSafe(target: CodebaseTarget, rel: string, maxBytes: nu
   if (!st) return { ok: false, reason: 'not_found' };
   if (st.isSymbolicLink()) return { ok: false, reason: 'bad_path' };
   if (!st.isFile()) return { ok: false, reason: 'not_found' };
-  if (st.size > maxBytes) return { ok: false, reason: 'too_large' };
   const real = await realpath(abs).catch(() => undefined);
   if (!real || !real.startsWith(rootReal + path.sep)) return { ok: false, reason: 'bad_path' };
+  if (isPdfName(path.basename(rel))) return openPdfText(target, rel, real, PDF_MAX_BYTES);
+  if (st.size > maxBytes) return { ok: false, reason: 'too_large' };
   const fh = await open(real, 'r').catch(() => undefined);
   if (!fh) return { ok: false, reason: 'not_found' };
   let buf: Buffer;

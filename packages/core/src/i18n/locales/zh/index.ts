@@ -28,7 +28,6 @@ import mobile from './mobile.json';
 import core from './core.json';
 import bridge from './bridge.json';
 import knowledge from './knowledge.json';
-import rag from './rag.json';
 import update from './update.json';
 
 export default {
@@ -61,6 +60,5 @@ export default {
   core,
   bridge,
   knowledge,
-  rag,
   update,
 };

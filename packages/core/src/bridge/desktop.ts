@@ -1,23 +1,12 @@
 import type {
+  GitImportMode,
   KnowledgeAddResult,
   KnowledgeBase,
   KnowledgeCreateOptions,
   KnowledgeEntry,
-  KnowledgeFolderInspection,
-  KnowledgeKind,
   KnowledgePreview,
   KnowledgeProgress,
 } from '../knowledge';
-import type {
-  IndexIntegrityReport,
-  KnowledgeDoc,
-  KnowledgeIndexSettings,
-  KnowledgeIndexState,
-  KnowledgeSource,
-  RetrievalRequest,
-  RetrievalResult,
-  SourceView,
-} from '../rag/types';
 import type { HostPolicy } from '../platform';
 import type { SkillFolder } from '../skillFolder';
 import type { SttModelId, SttState } from '../stt';
@@ -86,21 +75,20 @@ export interface DesktopUpdaterApi {
  * main 프로세스가 id·경로·URL·크기를 다시 확인하고 그 폴더 밖에는 쓰지 않는다. 오류는 보여줄 문구로 throw.
  */
 export interface DesktopKnowledgeApi {
+  /** 목록. 파일을 훑지 않는다 (개수·크기 캐시가 없으면 statsPending) */
   list(): Promise<KnowledgeBase[]>;
-  /**
-   * opts 생략 = 문서형 (ADR-127). 코드베이스는 kind:'codebase'와 linkedPath(로컬 폴더 연결) 또는
-   * 만든 뒤 cloneGit(Git 저장소)로 채운다. 이전 버전 PC(원격)는 opts를 무시할 수 있다.
-   */
+  /** 새 지식베이스 (빈 폴더). 이전 버전 PC(원격)는 opts를 무시할 수 있다 */
   create(name: string, opts?: KnowledgeCreateOptions): Promise<KnowledgeBase>;
   rename(id: string, name: string): Promise<KnowledgeBase>;
+  /** 설명을 저장한다 (빈 문자열이면 지운다). 답변 안내문에 KB 용도로 들어간다 */
+  setDescription(id: string, description: string): Promise<KnowledgeBase>;
   /** 지식베이스와 그 파일 전체를 지운다 */
   remove(id: string): Promise<void>;
   /**
-   * 항목 목록 (경로순, 숨김 항목·.git 제외).
-   * dir을 주면 그 폴더 바로 아래 항목만 ('' = 최상위). 없으면 files/ 아래 전체.
-   * 이전 버전 PC(원격)는 dir을 무시하고 전체를 돌려줄 수 있다.
+   * 폴더 한 단계의 항목 (ADR-139). dir = files/ 기준 폴더 경로 ('' = 최상위).
+   * 폴더 먼저·이름순, 숨김 항목·.git 제외, 하위 폴더는 내려가지 않는다. 출처 저장 위치와 같은 항목은 source가 붙는다.
    */
-  tree(id: string, dir?: string): Promise<KnowledgeEntry[]>;
+  tree(id: string, dir: string): Promise<KnowledgeEntry[]>;
   /** 끌어다 놓은 파일의 절대 경로 (Electron webUtils). 못 얻으면 '' */
   pathForFile(file: File): string;
   /** 디스크의 파일·폴더를 복사해 넣는다 (끌어다 놓기). dest는 files/ 기준 폴더 경로 */
@@ -111,62 +99,22 @@ export interface DesktopKnowledgeApi {
   pickFiles(id: string, dest?: string): Promise<KnowledgeAddResult>;
   /** 웹 페이지를 받아 본문을 마크다운으로 links/ 아래에 저장한다 */
   addLink(id: string, url: string): Promise<KnowledgeAddResult>;
-  /** GitHub 저장소를 repos/<repo>/로 얕게 클론한다 (.git은 지운다) */
-  cloneGit(id: string, url: string): Promise<KnowledgeAddResult>;
-  /** 파일·폴더 하나를 지운다 */
+  /**
+   * GitHub 저장소를 repos/<repo>/로 가져온다 (ADR-138). mode 생략 = 'clone'.
+   * clone: 얕은 클론, .git 유지 → pullGit으로 갱신. zip: 압축 파일을 받아 풀기(.git 없음).
+   */
+  cloneGit(id: string, url: string, opts?: { mode?: GitImportMode }): Promise<KnowledgeAddResult>;
+  /** clone 방식으로 가져온 저장소(path = 저장 위치, 예: repos/foo)를 git pull로 갱신한다 */
+  pullGit(id: string, path: string): Promise<KnowledgeAddResult>;
+  /** 파일·폴더 하나를 지운다 (폴더는 안의 내용까지). 출처 저장 위치를 지우면 출처 기록도 지운다 */
   removeEntry(id: string, path: string): Promise<void>;
   preview(id: string, path: string): Promise<KnowledgePreview>;
   /** OS 파일 탐색기로 연다 (path 없으면 지식베이스 폴더) */
   open(id: string, path?: string): Promise<void>;
-  /** 진행 중인 가져오기(추가·링크·클론)의 진행 상황. 해제 함수를 돌려준다 */
+  /** 진행 중인 가져오기(추가·링크·클론·pull)의 진행 상황. 해제 함수를 돌려준다 */
   onProgress?(listener: (p: KnowledgeProgress) => void): () => void;
   /** 진행 중인 가져오기를 취소한다 (해당 호출은 취소 문구로 reject) */
   cancel?(): Promise<void>;
-  // ── 색인·검색 (ADR-113). 모두 optional: 없으면 기존 동작 ──
-  /** 설명을 저장한다 (빈 문자열이면 지운다) */
-  setDescription?(id: string, description: string): Promise<KnowledgeBase>;
-  /** 지식베이스별 색인 상태 (ids 생략 시 전부) */
-  indexStates?(ids?: string[]): Promise<KnowledgeIndexState[]>;
-  /**
-   * 색인을 큐에 넣고 즉시 돌아온다 (문서형·미분류만, 코드베이스는 거절 — ADR-127).
-   * full = 전체 재생성, paths = 그 파일만 다시(부분), retryFailed = 실패한 문서만 다시.
-   */
-  reindex?(id: string, opts?: { full?: boolean; paths?: string[]; retryFailed?: boolean }): Promise<void>;
-  /** 진행 중·대기 중인 색인을 취소한다 */
-  cancelIndex?(id: string): Promise<void>;
-  /** 색인된 문서 목록 (query가 있으면 경로·제목 부분 일치) */
-  docs?(id: string, query?: string): Promise<KnowledgeDoc[]>;
-  getIndexSettings?(id: string): Promise<KnowledgeIndexSettings>;
-  /** 임베딩 모델이 바뀌면 stale로 표시하고 전체 재색인을 큐에 넣는다 */
-  setIndexSettings?(id: string, s: KnowledgeIndexSettings): Promise<KnowledgeIndexState>;
-  /** 출처 목록 (가져온 로컬 경로·URL·저장소) */
-  sources?(id: string): Promise<KnowledgeSource[]>;
-  /** 출처를 다시 받는다 (링크 재수집·저장소 재클론) */
-  updateSource?(id: string, sourceId: string): Promise<KnowledgeAddResult>;
-  /** 질문에 대한 근거 검색 (renderer는 질의 계획만 보낸다) */
-  retrieve?(req: RetrievalRequest, requestId?: string): Promise<RetrievalResult>;
-  /** 진행 중인 검색 취소 (requestId는 retrieve에 넘긴 값). 없는 id는 무시 */
-  cancelRetrieve?(requestId: string): Promise<void>;
-  /** 인용 한 건의 원문 주변 */
-  source?(kbId: string, chunkId: string): Promise<SourceView>;
-  /** 색인 상태 변화 구독. 해제 함수를 돌려준다 */
-  onIndexState?(listener: (s: KnowledgeIndexState) => void): () => void;
-  // ── 유형·코드베이스 (ADR-127~130). 모두 optional ──
-  /**
-   * 유형 지정·변경. → codebase: 진행 중 색인 취소, 기존 색인은 <kb>/backup/로 옮긴 뒤(복구 가능) 벡터 사용 중지.
-   * → document: 백업이 있으면 되살리고 없으면 색인을 큐에 넣는다. 연결 폴더 코드베이스는 문서형으로 바꿀 수 없다.
-   */
-  setKind?(id: string, kind: KnowledgeKind): Promise<KnowledgeBase>;
-  /** 코드베이스 제외 경로 저장 (gitignore 꼴, 최대 100개) */
-  setExcludes?(id: string, excludes: string[]): Promise<KnowledgeBase>;
-  /** OS 폴더 선택 창. 취소하면 null */
-  pickFolder?(): Promise<string | null>;
-  /** 등록 전 폴더 구조 미리보기 (읽기만 한다) */
-  inspectFolder?(path: string): Promise<KnowledgeFolderInspection>;
-  /** 색인 무결성 검사 (문서형) */
-  verifyIndex?(id: string): Promise<IndexIntegrityReport>;
-  /** 유형 변경으로 백업해 둔 색인을 되살린다 (없으면 false) */
-  restoreIndexBackup?(id: string): Promise<boolean>;
 }
 
 /** PC의 로컬 whisper.cpp 설정·모델 관리. 원격 기기는 이 설정을 따르기만 한다 */

@@ -8,8 +8,8 @@ import { filesRootOf, readKbMeta } from '../knowledgeMeta';
 const KB_ID_RE = /^kb[a-z0-9]{6,40}$/;
 
 /**
- * 명령행 KB 목록을 실제 폴더와 대조한다. 이름·유형·제외 규칙·연결 폴더는 meta.json에서 읽는다 (knowledgeMeta 공용 도우미).
- * 연결 폴더 코드베이스가 사라졌으면 항목은 남기고 missing으로 표시한다 (도구 호출 때 not_found로 알린다).
+ * 명령행 KB 목록을 실제 폴더와 대조한다. 이름과 원본 위치는 meta.json에서 읽는다 (knowledgeMeta 공용 도우미).
+ * 연결 폴더가 사라졌으면 항목은 남기고 missing으로 표시한다 (도구 호출 때 not_found로 알린다).
  */
 export async function loadKbEntries(root: string, kbIds: string[]): Promise<{ entries: KbEntry[]; problems: string[] }> {
   const entries: KbEntry[] = [];
@@ -29,8 +29,7 @@ export async function loadKbEntries(root: string, kbIds: string[]): Promise<{ en
       kbId,
       kbName: meta?.name ?? kbId,
       filesRoot,
-      ...(meta?.kind ? { kind: meta.kind } : {}),
-      excludes: meta?.excludes ?? [],
+      cacheDir: path.join(root, kbId, 'cache', 'text'),
       ...(missing ? { missing: true } : {}),
     });
   }

@@ -7,9 +7,9 @@ import type { BridgeClientMsg, BridgeServerMsg, BridgeStatus, CliProviderId, Stt
 import { CLI_PROVIDER_IDS } from './protocol';
 
 /** chat.start의 지식베이스 필드: 전체 목록 + 예전 bridge용 첫 KB (ADR-124) */
-function knowledgeFields(req: StreamRequest): { knowledgeId: string; knowledgeIds: string[]; knowledgeMode?: StreamRequest['knowledgeMode'] } {
+function knowledgeFields(req: StreamRequest): { knowledgeId: string; knowledgeIds: string[] } {
   const ids = knowledgeIdsOf(req);
-  return { knowledgeId: ids[0]!, knowledgeIds: ids, ...(req.knowledgeMode ? { knowledgeMode: req.knowledgeMode } : {}) };
+  return { knowledgeId: ids[0]!, knowledgeIds: ids };
 }
 
 /** 메시지 전송로. Electron IPC, WebSocket 모두 이 모양으로 감싼다 */

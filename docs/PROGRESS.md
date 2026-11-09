@@ -1,12 +1,42 @@
 # Project Progress
 
-Last Updated: 2026-11-07
+Last Updated: 2026-11-09
 Current Stage: **3단계 — 전체 개발 완료**
 Overall Progress: 1·2단계 완료(2026-10-09 컨펌), 3단계 Phase 1~7 전체 완료 + 개선 IMP-01~09 완료 (남은 항목은 사람 조치 — docs/BLOCKERS.md)
 
 > 재개 방법: 루트 `CLAUDE.md` → 이 파일 → `docs/02-ARCHITECTURE.md` → `git log`/`git status` 순으로 읽고,
 > 아래 체크리스트에서 첫 번째 미완료 항목부터 이어서 진행한다.
 > 게이트 통과: 2026-10-09 사용자 "컨펌". 3단계는 질문 없이 진행(결정 → DECISIONS, 사람 조치 → BLOCKERS).
+
+## 지식베이스 전면 개편 — 벡터 제거·Agentic 탐색·폴더 관리 (2026-11-09, ADR-136~140)
+계획: docs/plans/kb-agentic-overhaul-plan.md
+| ID | 작업 | 소유 | 상태 |
+|---|---|---|---|
+| K1 | 계약(knowledge.ts·desktop.ts)·계획·ADR | 리더 | DONE |
+| K2 | core 정리(rag 삭제·store 사전 검색 제거·skill-knowledge ×5) | Agent C | DONE |
+| K3 | bridge·desktop·server(clone/zip/pull·tree·색인 정리·kbTools·PDF 텍스트) | Agent A | DONE |
+| K4 | UI 재설계·문구 ×5·e2e | Agent B | DONE |
+| K5 | 통합 검증 | 리더 | DONE |
+| K6 | 독립 리뷰→수정 | Reviewer | DONE |
+| K7 | 패키징·실행·문서·커밋 | 리더 | DONE |
+
+- K6 리뷰 반영:
+  - tar pax 크기를 헤더보다 먼저 적용.
+  - clone 중 용량 감시(2초마다 `.git` 포함 측정, 넘으면 중단). 남은 `.clone-*`/`.zip-*` 임시 폴더는 시작할 때 정리.
+  - 가져오기 이동과 출처 기록의 원자성(`placeImported`). `removeEntry`는 메타를 먼저 저장.
+  - `preview`는 버퍼가 찰 때까지 반복해서 읽음.
+  - `kbDesc` 인자 오류 처리, sync RPC `knowledge.tree` 경로 검증, cloneGit 옵션의 null 허용, 원격 git 타임아웃 11분.
+  - 팝업 단계 로딩에서 늦게 온 응답을 버림.
+- 반영하지 않은 리뷰 항목:
+  - 업로드 조립기 메모리: peer별 상한이 있고 인증된 peer만 쓰며, 기존 코드다.
+  - 원격 create→setDescription 비원자성: 실패해도 머리글에서 다시 고칠 수 있다. RPC 호환을 위해 그대로 둔다.
+  - 조건부 사용 규칙은 안내일 뿐 강제하지 않는다.
+  - PDF 추출 중단과 실패 캐시는 다음으로 미룬다.
+- 검증:
+  - typecheck·lint·test PASS: core 786, ui 163, bridge 339(3 skip), relay 9, server 10(1 skip).
+  - e2e 전체 250 pass, 26 skip. 지식베이스·원격 spec 37 pass, 3 skip.
+  - 패키지 앱 e2e(`knowledge-packaged`) PASS. 데스크톱 재빌드 후 실행 확인.
+- 아키텍처 문서: docs/knowledge-architecture.md(전면 개정).
 
 ## 원격 관리 미지원 호스트 무한 로딩 수정 (2026-11-07, ADR-135)
 

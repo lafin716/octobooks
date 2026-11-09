@@ -33,6 +33,15 @@ describe('codexArgs — 지식베이스 MCP', () => {
     });
   });
 
+  it('허용 도구 목록에는 검색(searchKnowledge)이 없다', () => {
+    const args = codexArgs({ mcp: { command: 'x', args: [] } });
+    const enabled = args.find((a) => a.includes('.enabled_tools='))!;
+    expect(enabled).not.toContain('searchKnowledge');
+    for (const n of ['listKnowledgeDirectory', 'readKnowledgeFile', 'getKnowledgeOutline', 'findFiles', 'grepKnowledge', 'findDefinitions']) {
+      expect(enabled).toContain(n);
+    }
+  });
+
   it('env 값의 따옴표·역슬래시는 JSON 문자열로 이스케이프된다', () => {
     const args = codexArgs({ mcp: { command: 'x', args: [], env: { ELECTRON_RUN_AS_NODE: '1', TRICKY: 'a"b\\c' } } });
     const envArg = args.find((a) => a.includes('.env='));
@@ -41,6 +50,12 @@ describe('codexArgs — 지식베이스 MCP', () => {
 
   it('형식이 틀린 env 키는 던진다 (TOML 주입 방지)', () => {
     expect(() => codexArgs({ mcp: { command: 'x', args: [], env: { 'A] = 1\nB': 'v' } } })).toThrow();
+  });
+
+  it('샌드박스·셸 차단은 MCP가 있어도 그대로 둔다 (ADR-070)', () => {
+    const args = codexArgs({ mcp: { command: 'x', args: [] } });
+    expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
+    expect(args.join(' ')).toContain('features.shell_tool=false');
   });
 });
 
@@ -51,7 +66,7 @@ describe('claudeArgs — 지식베이스 MCP', () => {
   const tools = KB_TOOL_NAMES.map((n) => `${KB_MCP_TOOL_PREFIX}${n}`);
 
   it('mcp-config와 엄격 모드, 허용 도구 목록을 넣고 --add-dir은 넣지 않는다', () => {
-    const args = claudeArgs({ systemFile: '/tmp/s.md', webSearch: true, knowledge: false, kbMcp: { config, tools } });
+    const args = claudeArgs({ systemFile: '/tmp/s.md', webSearch: true, kbMcp: { config, tools } });
     const i = args.indexOf('--mcp-config');
     expect(i).toBeGreaterThan(-1);
     expect(args[i + 1]).toBe(config);
@@ -59,12 +74,19 @@ describe('claudeArgs — 지식베이스 MCP', () => {
     const allowed = args[args.indexOf('--allowedTools') + 1]!;
     for (const t of tools) expect(allowed).toContain(t);
     expect(args).not.toContain('--add-dir');
-    // 웹 도구는 지식베이스가 있으면 켜지지 않는다
+    // 웹 도구는 지식베이스가 있으면 켜지지 않는다 (자료 내용 유출 방지)
     expect(allowed).not.toContain('WebSearch');
+    expect(args[args.indexOf('--tools') + 1]).toBe('');
   });
 
   it('kbMcp가 없으면 mcp-config를 넣지 않는다', () => {
     expect(claudeArgs({ systemFile: '/tmp/s.md' })).not.toContain('--mcp-config');
+  });
+
+  it('지식베이스가 없고 웹 검색만 켜면 웹 도구만 연다 (기존과 같음)', () => {
+    const args = claudeArgs({ systemFile: '/tmp/s.md', webSearch: true });
+    expect(args[args.indexOf('--tools') + 1]).toBe('WebSearch,WebFetch');
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('WebSearch,WebFetch');
   });
 });
 
@@ -72,9 +94,11 @@ describe('claudeArgs — 지식베이스 MCP', () => {
 
 describe('kbToolNameOf', () => {
   it('접두어가 붙은 지식베이스 도구만 원래 이름으로 바꾼다', () => {
-    expect(kbToolNameOf(`${KB_MCP_TOOL_PREFIX}searchKnowledge`)).toBe('searchKnowledge');
-    expect(kbToolNameOf('mcp__other__searchKnowledge')).toBeUndefined();
+    expect(kbToolNameOf(`${KB_MCP_TOOL_PREFIX}findFiles`)).toBe('findFiles');
+    expect(kbToolNameOf(`${KB_MCP_TOOL_PREFIX}grepKnowledge`)).toBe('grepKnowledge');
+    expect(kbToolNameOf('mcp__other__findFiles')).toBeUndefined();
     expect(kbToolNameOf(`${KB_MCP_TOOL_PREFIX}deleteEverything`)).toBeUndefined();
+    expect(kbToolNameOf(`${KB_MCP_TOOL_PREFIX}searchKnowledge`)).toBeUndefined();
     expect(kbToolNameOf('Bash')).toBeUndefined();
   });
 });
@@ -84,9 +108,9 @@ describe('kbToolNameOf', () => {
 describe('Codex 파서 — mcp_tool_call', () => {
   it('지식베이스 도구 시작·완료를 활동으로 바꾸고 다른 서버는 무시한다', () => {
     const p = createCodexParser();
-    const item = { id: 'i1', type: 'mcp_tool_call', server: KB_MCP_SERVER_NAME, tool: 'searchKnowledge', arguments: { query: '가지치기' }, status: 'in_progress' };
+    const item = { id: 'i1', type: 'mcp_tool_call', server: KB_MCP_SERVER_NAME, tool: 'findFiles', arguments: { pattern: '*.md', path: 'docs' }, status: 'in_progress' };
     const started = p.line({ type: 'item.started', item });
-    expect(started).toEqual([{ type: 'tool', tool: { id: 'codex-i1', name: 'searchKnowledge', status: 'running', query: '가지치기' } }]);
+    expect(started).toEqual([{ type: 'tool', tool: { id: 'codex-i1', name: 'findFiles', status: 'running', query: 'docs' } }]);
     const done = p.line({ type: 'item.completed', item: { ...item, status: 'completed' } });
     expect(done[0]).toMatchObject({ type: 'tool', tool: { id: 'codex-i1', status: 'done' } });
     const failed = p.line({ type: 'item.completed', item: { ...item, status: 'failed' } });
@@ -97,7 +121,7 @@ describe('Codex 파서 — mcp_tool_call', () => {
 });
 
 describe('Claude 파서 — mcp__octobooks__ 도구', () => {
-  it('tool_use를 지식베이스 도구 이름과 질의로 보여준다', () => {
+  it('tool_use를 지식베이스 도구 이름과 경로로 보여준다', () => {
     const p = createClaudeParser();
     const evs = p.line({
       type: 'assistant',
@@ -108,7 +132,7 @@ describe('Claude 파서 — mcp__octobooks__ 도구', () => {
   });
 });
 
-// ---------- 서버: 여러 KB, fast 모드 ----------
+// ---------- 서버: 여러 KB 연결 ----------
 
 describe('bridge server — 여러 지식베이스 MCP', () => {
   let root: string;
@@ -187,23 +211,15 @@ describe('bridge server — 여러 지식베이스 MCP', () => {
     expect(cfg.mcpServers[KB_MCP_SERVER_NAME]!.args.filter((a) => a === '--kb')).toHaveLength(1);
   });
 
-  it('knowledgeMode가 없거나 auto·semantic·deep이면 도구를 켠다', async () => {
-    for (const knowledgeMode of [undefined, 'auto', 'semantic', 'deep']) {
+  it('지식베이스 실행 정보가 없는 서버는 KB를 연결해도 MCP를 만들지 않는다', async () => {
+    const out = await echoOf({ knowledgeIds: ['kbaaaaaa'] }, false);
+    expect(out.args).not.toContain('--mcp-config');
+  });
+
+  it('예전 knowledgeMode 값은 무시하고 도구를 켠다 (RAG 모드 제거, ADR-137)', async () => {
+    for (const knowledgeMode of [undefined, 'auto', 'semantic', 'deep', 'fast']) {
       const out = await echoOf({ knowledgeIds: ['kbaaaaaa'], knowledgeMode });
       expect(out.args, String(knowledgeMode)).toContain('--mcp-config');
     }
-  });
-
-  it('deep 모드만 검증 문장을 덧붙인다', async () => {
-    const deep = await echoOf({ knowledgeIds: ['kbaaaaaa'], knowledgeMode: 'deep' });
-    expect(deep.system).toContain('deep mode');
-    const auto = await echoOf({ knowledgeIds: ['kbaaaaaa'], knowledgeMode: 'auto' });
-    expect(auto.system).not.toContain('deep mode');
-  });
-
-  it('fast 모드는 MCP도 지식 파일도 쓰지 않는다', async () => {
-    const out = await echoOf({ knowledgeIds: ['kbaaaaaa'], knowledgeMode: 'fast' });
-    expect(out.args).not.toContain('--mcp-config');
-    expect(out.args).not.toContain('--add-dir');
   });
 });

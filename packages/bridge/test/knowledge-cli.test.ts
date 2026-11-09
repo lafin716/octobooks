@@ -1,10 +1,11 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
-import { t, type BridgeServerMsg } from '@branch/core';
-import { claudeArgs, createBridgeServer, createKnowledgeStore, type CliEnv } from '../src';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { KB_TOOLS_GUIDE, KB_TOOL_NAMES, type BridgeServerMsg } from '@branch/core';
+import { claudeArgs, createBridgeServer, type CliEnv } from '../src';
+import { KB_MCP_SERVER_NAME, KB_MCP_TOOL_PREFIX } from '../src/kbTools/config';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const fakeClaude = path.join(dir, 'fixtures/fake-claude.mjs');
@@ -68,13 +69,22 @@ function normalize(text: string): Record<string, unknown> {
   return rest;
 }
 
-describe('claudeArgs — 지식베이스 도구', () => {
-  const base = { systemFile: 's.txt' };
+/** Claude echo 결과의 --mcp-config에서 octobooks 서버 설정을 꺼낸다 */
+function mcpServerOf(args: string[]): { command: string; args: string[]; env: Record<string, string> } {
+  const cfg = JSON.parse(args[args.indexOf('--mcp-config') + 1]!) as { mcpServers: Record<string, never> };
+  return (cfg.mcpServers as Record<string, { command: string; args: string[]; env: Record<string, string> }>)[KB_MCP_SERVER_NAME]!;
+}
 
-  it('지식베이스가 없으면 --tools는 빈 값, --allowedTools는 없다 (기존과 같음)', () => {
+describe('claudeArgs — 지식베이스 MCP 도구', () => {
+  const base = { systemFile: 's.txt' };
+  const config = JSON.stringify({ mcpServers: { [KB_MCP_SERVER_NAME]: { type: 'stdio', command: 'node', args: [] } } });
+  const tools = KB_TOOL_NAMES.map((n) => `${KB_MCP_TOOL_PREFIX}${n}`);
+
+  it('지식베이스가 없으면 --tools는 빈 값, MCP·허용 도구 인자는 없다 (기존과 같음)', () => {
     const args = claudeArgs(base);
     expect(args[args.indexOf('--tools') + 1]).toBe('');
     expect(args).not.toContain('--allowedTools');
+    expect(args).not.toContain('--mcp-config');
     expect(args).not.toContain('--add-dir');
   });
 
@@ -84,66 +94,88 @@ describe('claudeArgs — 지식베이스 도구', () => {
     expect(args[args.indexOf('--allowedTools') + 1]).toBe('WebSearch,WebFetch');
   });
 
-  it('지식베이스가 켜지면 Read,Glob,Grep은 --tools에만 들어가고 --allowedTools에는 들어가지 않는다', () => {
-    const args = claudeArgs({ ...base, knowledge: true, knowledgeDir: '/kb/files' });
-    expect(args[args.indexOf('--tools') + 1]).toBe('Read,Glob,Grep');
-    expect(args).not.toContain('--allowedTools');
+  it('지식베이스가 켜지면 MCP 설정과 엄격 모드를 넣고, 접두어 붙은 KB 도구만 허용한다', () => {
+    const args = claudeArgs({ ...base, kbMcp: { config, tools } });
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe(config);
+    expect(args).toContain('--strict-mcp-config');
+    const allowed = args[args.indexOf('--allowedTools') + 1]!.split(',');
+    expect(allowed).toEqual(tools);
+    expect(allowed).not.toContain('Read');
+    expect(allowed).not.toContain('Glob');
+    expect(allowed).not.toContain('Grep');
+    expect(args).not.toContain('--add-dir');
   });
 
   it('지식베이스가 있으면 웹 검색을 켜도 웹 도구를 끈다 (자료 내용 유출 방지)', () => {
-    const args = claudeArgs({ ...base, webSearch: true, knowledge: true, knowledgeDir: '/kb/files' });
-    expect(args[args.indexOf('--tools') + 1]).toBe('Read,Glob,Grep');
-    expect(args).not.toContain('--allowedTools');
+    const args = claudeArgs({ ...base, webSearch: true, kbMcp: { config, tools } });
+    expect(args[args.indexOf('--tools') + 1]).toBe('');
+    expect(args[args.indexOf('--allowedTools') + 1]).not.toContain('WebSearch');
   });
 
-  it('--add-dir은 지식베이스 폴더를 가리키고 인자 목록 맨 마지막에 온다', () => {
-    const args = claudeArgs({ ...base, model: 'sonnet', knowledge: true, knowledgeDir: '/kb/files' });
-    const i = args.indexOf('--add-dir');
-    expect(i).toBeGreaterThan(-1);
-    expect(args[i + 1]).toBe('/kb/files');
-    expect(i + 2).toBe(args.length);
-  });
-
-  it('knowledgeDir가 없으면 --add-dir을 넣지 않는다', () => {
-    expect(claudeArgs({ ...base, knowledge: true })).not.toContain('--add-dir');
+  it('지식베이스 도구 목록에는 옛 검색 도구와 파일 읽기 도구가 없다', () => {
+    const args = claudeArgs({ ...base, kbMcp: { config, tools } });
+    const allowed = args[args.indexOf('--allowedTools') + 1]!;
+    expect(allowed).not.toContain('searchKnowledge');
+    expect(allowed).not.toContain('Read');
   });
 });
 
-describe('bridge server — 지식베이스 연결 (ADR-107)', () => {
-  it('지식베이스가 있으면 Claude는 읽기 도구·폴더·안내 문구를 받고, Codex는 파일 목록 안내만 받는다', async () => {
-    const root = await tmp('kb-cli-');
-    const store = createKnowledgeStore({ root, env: { PATH: process.env.PATH } });
-    const kb = await store.create('생물');
-    await store.addFiles(kb.id, [{ name: 'a.txt', data: new TextEncoder().encode('내용') }]);
+describe('bridge server — 지식베이스 연결 (MCP)', () => {
+  let root: string;
+  const KB_ID = 'kbaaaaaa';
 
-    const claude = createBridgeServer({ cliEnv: cliEnv('echo'), knowledge: store });
-    const c = await chat(claude, 'claude-cli', kb.id);
+  beforeAll(async () => {
+    root = await tmp('kb-cli-');
+    await mkdir(path.join(root, KB_ID, 'files'), { recursive: true });
+    await writeFile(path.join(root, KB_ID, 'meta.json'), JSON.stringify({ name: '생물' }));
+    await writeFile(path.join(root, KB_ID, 'files', 'a.txt'), '내용');
+  });
+
+  const launcher = () => ({ command: '/app/electron', args: ['/app/kbMcp.cjs'], env: { ELECTRON_RUN_AS_NODE: '1' }, root });
+
+  it('지식베이스가 있으면 Claude는 KB MCP 서버와 안내 문구를 받고, Codex는 같은 안내를 stdin으로 받는다', async () => {
+    const claude = createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: launcher() });
+    const c = await chat(claude, 'claude-cli', KB_ID);
     const echo = normalize(c.text) as { args: string[]; system: string };
-    expect(echo.args[echo.args.indexOf('--tools') + 1]).toBe('Read,Glob,Grep');
-    expect(echo.args).not.toContain('--allowedTools');
-    expect(echo.args[echo.args.length - 1]).toBe(store.dirFor(kb.id));
-    expect(echo.system).toContain('튜터 지시');
-    expect(echo.system).toContain('- a.txt');
-    // 작업 폴더는 임시 폴더라 절대 경로를 알려야 Glob·Grep이 지식베이스를 찾는다 (ADR-119)
-    expect(echo.system).toContain(store.dirFor(kb.id));
 
-    const codex = createBridgeServer({ cliEnv: cliEnv('echo'), knowledge: store });
-    const x = await chat(codex, 'codex-cli', kb.id);
-    const note = t('bridge.knowledge.codexIndex', { dir: store.dirFor(kb.id), outline: '- a.txt' });
-    expect((JSON.parse(x.text) as { stdin: string }).stdin).toContain(note);
+    const srv = mcpServerOf(echo.args);
+    expect(srv.command).toBe('/app/electron');
+    expect(srv.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' });
+    expect(srv.args).toEqual(['/app/kbMcp.cjs', '--root', root, '--kb', KB_ID]);
+    expect(echo.args).toContain('--strict-mcp-config');
+    expect(echo.args).not.toContain('--add-dir');
+    expect(echo.args[echo.args.indexOf('--tools') + 1]).toBe('');
+
+    expect(echo.system).toContain('튜터 지시');
+    expect(echo.system).toContain('Knowledge bases for this answer:');
+    expect(echo.system).toContain(`- 생물 (kbId: ${KB_ID})`);
+    expect(echo.system).toContain(KB_TOOLS_GUIDE);
+    expect(echo.system).toContain(`tool names are prefixed with ${KB_MCP_TOOL_PREFIX}`);
+
+    const codex = createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: launcher() });
+    const x = await chat(codex, 'codex-cli', KB_ID);
+    const payload = JSON.parse(x.text) as { args: string[]; stdin: string };
+    expect(payload.stdin).toContain('Knowledge bases for this answer:');
+    expect(payload.stdin).toContain(`- 생물 (kbId: ${KB_ID})`);
+    expect(payload.stdin).toContain(KB_TOOLS_GUIDE);
+    expect(payload.stdin).not.toContain('prefixed with');
+    expect(payload.args.join(' ')).toContain(`mcp_servers.${KB_MCP_SERVER_NAME}.args=["/app/kbMcp.cjs","--root","${root}","--kb","${KB_ID}"]`);
     // 샌드박스·셸 차단은 지식베이스가 있어도 그대로 (ADR-070)
-    const args = (JSON.parse(x.text) as { args: string[] }).args;
-    expect(args[args.indexOf('--sandbox') + 1]).toBe('read-only');
-    expect(args.join(' ')).toContain('features.shell_tool=false');
+    expect(payload.args[payload.args.indexOf('--sandbox') + 1]).toBe('read-only');
+    expect(payload.args.join(' ')).toContain('features.shell_tool=false');
+  });
+
+  it('지식베이스 실행 정보가 없는 서버는 KB를 연결해도 MCP를 붙이지 않는다', async () => {
+    const plain = createBridgeServer({ cliEnv: cliEnv('echo') });
+    const out = normalize((await chat(plain, 'claude-cli', KB_ID)).text) as { args: string[]; system: string };
+    expect(out.args).not.toContain('--mcp-config');
+    expect(out.system).not.toContain('Knowledge bases for this answer:');
   });
 
   it('없는 지식베이스·형식이 틀린 id는 지식베이스가 없을 때와 똑같이 답한다', async () => {
-    const root = await tmp('kb-unknown-');
-    const store = createKnowledgeStore({ root, env: { PATH: process.env.PATH } });
-
     const plain = await chat(createBridgeServer({ cliEnv: cliEnv('echo') }), 'claude-cli', undefined);
-    const unknown = await chat(createBridgeServer({ cliEnv: cliEnv('echo'), knowledge: store }), 'claude-cli', 'kbzzzzzzzz');
-    const invalid = await chat(createBridgeServer({ cliEnv: cliEnv('echo'), knowledge: store }), 'claude-cli', '../../etc');
+    const unknown = await chat(createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: launcher() }), 'claude-cli', 'kbzzzzzzzz');
+    const invalid = await chat(createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: launcher() }), 'claude-cli', '../../etc');
 
     expect(unknown.errors).toEqual([]);
     expect(invalid.errors).toEqual([]);

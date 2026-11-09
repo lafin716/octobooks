@@ -1,105 +1,57 @@
 {
   "button": {
     "label": "Knowledge base",
-    "title": "This study's knowledge base"
+    "title": "Knowledge bases for this study"
   },
   "dialog": {
-    "title": "Knowledge base",
-    "close": "Close knowledge base",
+    "title": "Knowledge bases",
+    "close": "Close knowledge bases",
     "back": "Back to list",
     "full": "Full screen",
     "exitFull": "Exit full screen"
   },
   "remote": {
-    "outdated": "Not available on this PC",
-    "outdatedHint": "Connect to the latest OctoBooks desktop app to manage knowledge bases here. octobooks serve does not support it.",
-    "connecting": "Connecting to the PC…",
-    "offline": "Not connected to the PC. Once connected, you can manage knowledge bases here.",
+    "outdated": "This PC can't be managed from here",
+    "outdatedHint": "Connect to the latest desktop OctoBooks app to manage knowledge bases here too. octobooks serve is not supported.",
+    "connecting": "Connecting to your PC…",
+    "offline": "Not connected to your PC. Knowledge bases can be managed here once it's connected.",
     "deleteOff": "Remote deletion is turned off in the PC settings.",
-    "noOpen": "Opening folders is only possible in the PC app."
+    "noOpen": "Opening folders is only available in the PC app."
   },
   "unavailable": {
-    "notice": "Knowledge bases are not available on this device. Open the desktop app."
+    "notice": "Knowledge bases aren't available on this device. Open them in the desktop app."
   },
   "list": {
     "heading": "Knowledge bases",
     "empty": "No knowledge bases yet.",
-    "emptyHint": "Collect material here and answers will search it and cite the paths.",
+    "emptyHint": "Collect material and link it to a study, and the AI will refer to it when answering.",
     "create": "New knowledge base",
-    "linkedBadge": "Linked to this study",
-    "link": "Link to this study",
+    "linkedBadge": "Linked",
+    "link": "Link",
     "unlink": "Unlink",
-    "count": "{count} files",
-    "counting": "Counting files…",
-    "filter": "Type filter",
-    "filterAll": "All",
-    "noMatch": "No knowledge bases match.",
+    "count": "{count} files · {size}",
+    "counting": "Counting…",
+    "noMatch": "No knowledge bases match your search.",
     "search": "Search knowledge bases",
-    "searchPlaceholder": "Search by name, description, or path",
+    "searchPlaceholder": "Search by name or description",
     "sort": "Sort",
-    "sortName": "Name",
-    "sortRecent": "Recent",
-    "sortSize": "Size"
+    "sortName": "By name",
+    "sortRecent": "Most recent",
+    "sortSize": "By size",
+    "toggleHint": "Tap a name to link or unlink it from this study.",
+    "open": "Open details"
   },
   "create": {
     "title": "New knowledge base",
     "namePlaceholder": "Name (e.g. Cell biology textbook)",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description (optional)",
+    "descriptionPlaceholder": "e.g. Our team's deployment procedure documents",
+    "descriptionHint": "The AI uses this to decide when to refer to the knowledge base.",
     "submit": "Create",
+    "creating": "Creating…",
     "cancel": "Cancel",
-    "back": "Back",
-    "kindTitle": "What kind of knowledge base?",
-    "name": "Name",
-    "description": "Description (optional)",
-    "working": "Creating…",
-    "failed": "Could not create it. Please try again.",
-    "kind": {
-      "codebase": {
-        "title": "Codebase",
-        "desc": "A folder or GitHub repo. Files are explored directly each time you ask."
-      },
-      "document": {
-        "title": "Documents",
-        "desc": "Index PDFs and documents for keyword and semantic search."
-      }
-    },
-    "codebase": {
-      "notice": "Codebases are not indexed. Real files are explored directly each time you ask.",
-      "source": "Source",
-      "pathLabel": "Folder path",
-      "pathPlaceholder": "/path/to/project",
-      "pickFolder": "Choose folder",
-      "gitLabel": "Or GitHub repository",
-      "gitPlaceholder": "owner/repo or https://github.com/owner/repo",
-      "gitHint": "Only the latest files on the default branch are fetched",
-      "inspecting": "Inspecting folder…",
-      "inspectFailed": "Could not read the folder. Check the path.",
-      "inspected": "{count} files · {size}",
-      "truncated": "Too many files, so only part was counted.",
-      "isGit": "This is a Git repository.",
-      "suggestDocument": "If this folder is mostly PDFs or documents, creating it as Documents works better.",
-      "descPlaceholder": "e.g. Payment module source",
-      "excludes": "Paths to exclude (one per line)",
-      "excludesHint": "Build and dependency folders such as node_modules are excluded by default.",
-      "submit": "Create codebase",
-      "cloneFailed": "Could not clone the repository. Check the URL and access. The knowledge base was created."
-    },
-    "document": {
-      "pick": "Choose files",
-      "pickFolder": "Choose folder",
-      "empty": "Drag files or folders here",
-      "count": "{count} · {size}",
-      "listLabel": "Files to add",
-      "remove": "Remove from list",
-      "duplicates": "{count} files with the same name and size are excluded.",
-      "submit": "Create documents knowledge base",
-      "index": {
-        "label": "Index method",
-        "local": "Local semantic search (default)",
-        "none": "Keyword only (BM25, no semantic index)",
-        "openai": "OpenAI embeddings (advanced, API key required)",
-        "advanced": "Advanced"
-      }
-    }
+    "failed": "Couldn't create it. Please try again."
   },
   "rename": {
     "action": "Rename",
@@ -109,308 +61,104 @@
   "delete": {
     "action": "Delete knowledge base",
     "title": "Delete '{name}'?",
-    "message": "The {count} files inside will be deleted too. This cannot be undone.",
-    "confirm": "Delete",
-    "messageUnknown": "All files inside will be deleted too. This cannot be undone."
+    "message": "The {count} files inside will be deleted too. This can't be undone.",
+    "messageUnknown": "All files inside will be deleted too. This can't be undone.",
+    "confirm": "Delete"
   },
   "tree": {
     "heading": "Files",
-    "empty": "No files yet.",
+    "empty": "This folder is empty.",
     "remove": "Delete",
     "removeTitle": "Delete '{name}'?",
-    "removeMessage": "This cannot be undone.",
+    "removeMessage": "It can't be restored after deletion.",
     "open": "Open folder",
-    "previewEmpty": "Pick a file to preview it.",
-    "binary": "This file cannot be previewed as text.",
+    "previewEmpty": "Pick a file to see its contents.",
+    "binary": "This file can't be previewed as text.",
     "truncated": "Showing the beginning only.",
-    "expandAll": "Expand all",
-    "collapseAll": "Collapse all"
+    "loading": "Loading…",
+    "root": "Top",
+    "breadcrumb": "Folder path"
   },
   "add": {
     "drop": "Drop files or folders here",
     "pick": "Choose files",
+    "intoFolder": "Adds into the {name} folder",
     "linkLabel": "Web page address",
     "linkPlaceholder": "https://...",
-    "linkSubmit": "Fetch",
+    "linkSubmit": "Import",
     "gitLabel": "GitHub repository",
     "gitPlaceholder": "owner/repo or https://github.com/owner/repo",
-    "gitSubmit": "Clone",
-    "invalidUrl": "Only http(s) addresses can be used.",
-    "invalidGit": "Only GitHub repository addresses can be used.",
+    "gitSubmit": "Import",
+    "invalidUrl": "Only http(s) addresses are allowed.",
+    "invalidGit": "Only GitHub repository addresses are allowed.",
     "done": "Added {count} items.",
-    "skipped": "{count} items were skipped because of size or format.",
-    "failed": "Could not add it. Please try again.",
-    "busyDrop": "Still importing. Drop again when it finishes.",
-    "dropEmpty": "No files found in what you dropped.",
-    "nothing": "Nothing was added. Check the file size or type.",
-    "gitHint": "Only the latest files of the default branch (main, master, …) are downloaded",
-    "allDuplicates": "Skipped {count} files that are already here."
+    "skipped": "{count} were skipped because of size or format.",
+    "failed": "Couldn't add it. Please try again.",
+    "busyDrop": "Still importing. Drop them again once it finishes.",
+    "dropEmpty": "No files were found in what you dropped.",
+    "nothing": "No files were added. Check their size and format.",
+    "allDuplicates": "{count} were skipped because they're already here."
+  },
+  "git": {
+    "modeLabel": "Import method",
+    "clone": "Clone (update later with Pull)",
+    "zip": "ZIP download (no history)",
+    "cloneHint": "Shallow clone that keeps .git, so you can pull the latest changes later.",
+    "zipHint": "Downloads an archive with no history. To update, download it again.",
+    "pull": "Pull"
   },
   "error": {
-    "generic": "Something went wrong. Please try again.",
-    "badDescription": "Check the description.",
-    "badSettings": "Check the settings.",
-    "badQuery": "Check the search query.",
-    "badId": "Knowledge base not found.",
-    "unavailable": "Knowledge bases are not available on this device."
+    "generic": "Something went wrong. Please try again."
   },
   "progress": {
     "label": "Import progress",
     "copy": "Copying files…",
     "copied": "Copied {count} files ({size})",
-    "download": "Downloading page…",
+    "download": "Downloading web page…",
     "clone": "Downloading from GitHub…",
+    "pull": "Pulling latest changes from GitHub…",
+    "extract": "Extracting…",
     "save": "Saving…",
     "elapsed": "{seconds}s",
     "cancel": "Cancel",
     "cancelled": "Import cancelled."
   },
-  "citations": {
-    "label": "Sources",
-    "open": "Open source {n}: {title}"
-  },
   "source": {
-    "title": "Source",
-    "close": "Close",
-    "loading": "Loading the original…",
-    "failed": "Could not open the original. {message}",
-    "chunk": "Matched passage",
-    "section": "Surrounding context",
-    "page": "Page {page}",
-    "line": "Line {line}",
-    "lines": "Lines {start}–{end}"
-  },
-  "index": {
-    "empty": "Not indexed yet",
-    "queued": "Waiting to index",
-    "indexing": "Indexing {done}/{total}",
-    "ready": "Indexed · {count} chunks",
-    "stale": "Files changed; re-index needed",
-    "error": "Indexing failed",
-    "reindex": "Re-index",
-    "cancel": "Cancel indexing"
+    "github": "GitHub",
+    "githubClone": "GitHub · Clone",
+    "githubZip": "GitHub · ZIP",
+    "link": "Web",
+    "legacy": "Linked folder (read-only)",
+    "legacyHint": "This folder was linked the older way. You can browse it, but can't add or delete files."
   },
   "description": {
-    "cancel": "Cancel",
-    "edit": "Edit",
-    "empty": "No description. Tell the model what this knowledge base covers so retrieval is more accurate.",
     "label": "Description",
-    "placeholder": "e.g. Our team deployment runbooks",
-    "save": "Save"
-  },
-  "embedding": {
-    "heading": "Embedding model",
-    "local": "Local hash (offline, old default)",
-    "model": "Model",
-    "modelDefault": "Default model",
-    "openai": "OpenAI semantic search",
-    "openaiNotice": "With OpenAI, this knowledge base's document text and your questions are sent to OpenAI servers. Use \"No vectors\" for sensitive material.",
-    "provider": "Method",
-    "reindexNeeded": "The model changed. Reindex to apply it to search.",
+    "placeholder": "e.g. Our team's deployment procedure documents",
+    "edit": "Edit description",
     "save": "Save",
-    "saved": "Embedding settings saved.",
-    "none": "No vectors (keyword, code, folder search — default)",
-    "dimensions": "Dimensions",
-    "hint": {
-      "none": "Searches by keyword (FTS5), code symbols, file paths, and folder info with no API key. Enough for most cases.",
-      "local-hash": "The old default. Evaluation showed almost no quality gain, so new knowledge bases don't use it.",
-      "openai": "Also finds passages with similar meaning. Calls the OpenAI API for indexing and each question (uses the OpenAI key in Settings › API keys)."
-    },
-    "costEstimate": "Estimated indexing cost: about {tokens} tokens, about ${usd} (estimate, one-time; only changed files are resent)"
-  },
-  "rag": {
-    "enabled": "Use knowledge search",
-    "expandParent": "Include neighboring paragraphs",
-    "expandQuery": "When evidence is weak, widen the question into English code search terms and search again (one extra model call)",
-    "heading": "Search settings",
-    "maxContextChars": "Max evidence characters",
-    "minScore": "Minimum relevance",
-    "rerank": "Rerank results",
-    "reset": "Defaults",
-    "save": "Save",
-    "topK": "Evidence count",
-    "open": "Search settings",
-    "hint": "Applies to every knowledge base.",
-    "mode": "Search mode",
-    "debug": "Debug: show per-stage search timings under answers"
-  },
-  "sources": {
-    "empty": "No sources added.",
-    "heading": "Sources",
-    "type": {
-      "files": "Files",
-      "folder": "Folder",
-      "github": "GitHub",
-      "web": "Web"
-    },
-    "update": "Update",
-    "updated": "Updated source {name}.",
-    "updating": "Updating…"
-  },
-  "storage": {
-    "chunks": "Chunks",
-    "docs": "Documents",
-    "heading": "Storage",
-    "index": "Index",
-    "source": "Source"
+    "cancel": "Cancel",
+    "empty": "No description. A description helps the AI decide when to use this knowledge base."
   },
   "link": {
-    "inherited": "Following the parent branch's knowledge bases.",
-    "overridden": "This branch uses its own knowledge bases.",
+    "inherited": "Following the knowledge bases of the parent branch.",
+    "overridden": "Only this branch uses different knowledge bases.",
     "reset": "Follow parent"
   },
-  "settings": {
-    "open": "Knowledge base settings",
-    "title": "Knowledge base settings",
-    "titleOf": "{name} settings",
-    "close": "Close",
-    "descriptionHint": "Describing the material helps search find better matches.",
-    "embeddingHint": "Changing the model requires re-indexing."
-  },
-  "autoIndex": {
-    "label": "Auto index",
-    "hint": "When on, files are indexed as soon as you add them. When off, press Re-index yourself."
-  },
-  "mode": {
-    "auto": "Auto",
-    "fast": "Fast",
-    "deep": "Deep",
-    "semantic": "Semantic",
-    "hint": {
-      "auto": "Searches locally and looks further only when evidence is weak. Right for most people.",
-      "fast": "Local search only. No extra model calls or document browsing — fastest.",
-      "deep": "Gathers more evidence, and Codex/Claude read the source documents they need.",
-      "semantic": "Also searches by meaning in knowledge bases with an OpenAI index. Falls back to local search otherwise."
-    }
-  },
   "trace": {
-    "label": "Search",
-    "kbs": "{n} knowledge bases",
-    "docs": "{n} documents",
-    "expanded": "widened and searched again",
-    "tools": "{n} extra lookups",
-    "semantic": "semantic",
-    "topDocs": "Top documents"
-  },
-  "notice": {
-    "semantic_unavailable": "No semantic index, so local search was used.",
-    "embed_failed": "Semantic search failed, so keyword search was used.",
-    "insufficient": "No relevant evidence found in the knowledge base.",
-    "timeout": "Search timed out, so the answer has no knowledge base evidence.",
-    "kb_skipped": "Knowledge bases without an index were skipped.",
-    "keyword_only": "Searched with keywords only (no embeddings).",
-    "version_conflict": "Sources mention different versions. Check the versions in the answer.",
-    "codebase_missing": "A codebase folder could not be found and was skipped."
-  },
-  "kind": {
-    "codebase": "Codebase",
-    "document": "Documents",
-    "unclassified": "Unclassified",
-    "choose": "Choose a type",
-    "suggest": "Suggested: {kind}",
-    "blocked": "A codebase linked to a folder cannot be changed to documents."
-  },
-  "maint": {
-    "heading": "Index maintenance",
-    "retryFailed": "Retry {count} failed documents",
-    "retried": "Re-indexing {count} failed documents.",
-    "rebuild": "Rebuild all",
-    "rebuilding": "Rebuilding everything.",
-    "verify": "Verify index",
-    "verifyOk": "The index is healthy.",
-    "verifyBad": "The index has problems. Try rebuilding all.",
-    "restore": "Restore from backup",
-    "restored": "The index was restored from backup.",
-    "noBackup": "No backup to restore."
-  },
-  "overview": {
-    "heading": "Overview",
-    "kind": "Type",
-    "method": "Search method",
-    "path": "Linked path",
-    "files": "Files",
-    "updated": "Updated"
-  },
-  "method": {
-    "agentic": "Direct exploration (no index)",
-    "hybrid": "Hybrid search (vector + keyword)"
-  },
-  "codebase": {
-    "excludes": "Exclude list",
-    "excludesHint": "Changes apply from your next question. No reindexing is needed.",
-    "excludesReset": "Reset to default",
-    "excludesSave": "Save"
-  },
-  "readiness": {
-    "ready": "Ready",
-    "empty": "Empty",
-    "loading": "Loading",
-    "indexing": "Indexing",
-    "rebuilding": "Rebuilding",
-    "partial": "Partly ready",
-    "cancelled": "Cancelled",
-    "needsKind": "Type needed",
-    "failed": "Failed"
-  },
-  "cause": {
-    "updating": "Files changed and the latest content is being applied.",
-    "last_failed": "The last job failed.",
-    "stale": "Files changed and a reindex is needed.",
-    "failed_docs": "Some documents could not be indexed.",
-    "index_error": "An error occurred while indexing.",
-    "not_indexed": "Not indexed yet.",
-    "codebase_missing": "The linked folder cannot be found. It may have been moved or deleted.",
-    "cancelled": "The job was cancelled.",
-    "interrupted": "The job was interrupted when the app closed.",
-    "unknown": "An unknown problem occurred."
-  },
-  "fix": {
-    "addFiles": "Add more files.",
-    "reindex": "Press Reindex.",
-    "retryFailed": "Retry only the failed documents.",
-    "rebuild": "Rebuild everything.",
-    "chooseKind": "Choose a type below.",
-    "relink": "Reconnect the folder, or delete this knowledge base and create a new one.",
-    "openSettings": "Check in Settings."
-  },
-  "test": {
-    "heading": "Search test",
-    "hint": "Ask one question to see which evidence this knowledge base returns. No answer is generated.",
-    "label": "Search query",
-    "placeholder": "How does Pod Scheduling work?",
-    "run": "Search",
-    "running": "Searching…",
-    "cancel": "Cancel search",
-    "cancelled": "Search cancelled. Search again to get fresh results.",
-    "error": "Search failed.",
-    "unsupported": "Search test is not available in this version.",
-    "empty": "No evidence found. Try another question or add more documents.",
-    "count": "{count} evidence · {ms}ms",
-    "results": "Search results",
-    "relevance": "Relevance",
-    "open": "Open source",
-    "skipped": "Skipped {count} knowledge base(s) (no index or failed)"
+    "explored": "Explored knowledge bases {count} times"
   },
   "guard": {
-    "codebase_index_forbidden": {
-      "cause": "Codebase knowledge bases do not use indexing or vector search.",
-      "fix": "Use indexing and search with a document knowledge base instead."
-    },
-    "linked_kind_locked": {
-      "cause": "A linked folder cannot be changed to a document knowledge base.",
-      "fix": "Create a new document knowledge base with a copy of the folder contents."
-    },
     "folder_not_allowed": {
-      "cause": "This location cannot be linked, such as a home or system folder.",
-      "fix": "Pick a project folder and link it again."
+      "cause": "This location, such as a home or system folder, can't be linked.",
+      "fix": "Choose a project folder and try again."
     },
     "kb_meta_unreadable": {
-      "cause": "The knowledge base information file could not be read.",
+      "cause": "The knowledge base's info file couldn't be read.",
       "fix": "Delete the knowledge base and create it again."
     },
     "arg": {
-      "cause": "The input value is not valid.",
-      "fix": "Check the fields and try again."
+      "cause": "An input value is invalid.",
+      "fix": "Check the item and try again."
     }
   }
 }

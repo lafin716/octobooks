@@ -23,8 +23,8 @@ async function main(): Promise<void> {
   }
   const { entries, problems } = await loadKbEntries(root, kbIds);
   for (const p of problems) process.stderr.write(`kbMcp: ${p}\n`);
-  // 색인은 읽기 전용으로만 연다 (키 없음, 쓰기 없음). 색인이 없으면 키워드 스캔으로 대신한다
-  const service = new KbToolService({ kbs: entries, root });
+
+  const service = new KbToolService({ kbs: entries });
   await serveStdio(service, process.stdin, process.stdout);
 }
 

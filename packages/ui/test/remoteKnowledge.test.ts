@@ -32,6 +32,21 @@ function makeApi(opts: { rpc: RemoteRpc; pickFiles?: () => Promise<UploadSource[
 }
 
 describe('remote knowledge api: 기본 호출', () => {
+  it('설명이 있는 생성은 create 뒤 setDescription을 보내고, 없으면 한 번만 보낸다', async () => {
+    const { rpc, calls } = fakeRpc((method) => (method === 'knowledge.create' ? { id: 'kb9', name: 'n', fileCount: 0 } : { id: 'kb9', name: 'n', description: 'd', fileCount: 0 }));
+    const { api } = makeApi({ rpc });
+    const kb = await api.create('n', { description: '  세포 노트  ' });
+    expect(calls).toEqual([
+      { method: 'knowledge.create', args: ['n'] },
+      { method: 'knowledge.setDescription', args: ['kb9', '세포 노트'] },
+    ]);
+    expect(kb.description).toBe('d');
+
+    calls.length = 0;
+    await api.create('m');
+    expect(calls).toEqual([{ method: 'knowledge.create', args: ['m'] }]);
+  });
+
   it('목록 조회는 knowledge.list를 보낸다', async () => {
     const { rpc, calls } = fakeRpc(() => [{ id: 'kb1', name: 'a', fileCount: 0 }]);
     const { api } = makeApi({ rpc });
@@ -51,19 +66,42 @@ describe('remote knowledge api: 기본 호출', () => {
     ]);
   });
 
-  it('선택적 인자는 생략하면 보내지 않는다', async () => {
-    const { rpc, calls } = fakeRpc();
+  it('tree는 폴더 한 단계(dir)만 요청한다', async () => {
+    const { rpc, calls } = fakeRpc(() => []);
     const { api } = makeApi({ rpc });
-    await api.indexStates!();
-    await api.reindex!('kb1');
-    await api.docs!('kb1');
-    expect(calls.map((c) => c.args)).toEqual([[], ['kb1'], ['kb1']]);
+    await api.tree('kb1', '');
+    await api.tree('kb1', 'docs/a');
+    expect(calls).toEqual([
+      { method: 'knowledge.tree', args: ['kb1', ''] },
+      { method: 'knowledge.tree', args: ['kb1', 'docs/a'] },
+    ]);
   });
 
-  it('retrieve는 원격에 두지 않는다 (답변은 PC에서 실행)', () => {
+  it('cloneGit는 mode를 생략하면 인자를 보내지 않고, 주면 옵션으로 보낸다', async () => {
+    const { rpc, calls } = fakeRpc(() => ({ added: [], skipped: 0 }));
+    const { api } = makeApi({ rpc });
+    await api.cloneGit('kb1', 'https://github.com/o/r');
+    await api.cloneGit('kb1', 'https://github.com/o/r', { mode: 'zip' });
+    expect(calls).toEqual([
+      { method: 'knowledge.cloneGit', args: ['kb1', 'https://github.com/o/r'] },
+      { method: 'knowledge.cloneGit', args: ['kb1', 'https://github.com/o/r', { mode: 'zip' }] },
+    ]);
+  });
+
+  it('pullGit는 저장소 경로를 함께 보낸다', async () => {
+    const { rpc, calls } = fakeRpc(() => ({ added: [], skipped: 0 }));
+    const { api } = makeApi({ rpc });
+    await api.pullGit('kb1', 'repo-a');
+    expect(calls).toEqual([{ method: 'knowledge.pullGit', args: ['kb1', 'repo-a'] }]);
+  });
+
+  it('retrieve와 색인 메서드는 원격 API에 없다 (답변·색인은 PC에서 실행)', () => {
     const { rpc } = fakeRpc();
     const { api } = makeApi({ rpc });
-    expect(api.retrieve).toBeUndefined();
+    const surface = api as unknown as Record<string, unknown>;
+    for (const name of ['retrieve', 'indexStates', 'reindex', 'docs', 'onIndexState']) {
+      expect(surface[name], name).toBeUndefined();
+    }
   });
 
   it('pathForFile은 빈 문자열, open과 addPaths는 거절한다', async () => {
@@ -176,17 +214,7 @@ describe('remote knowledge api: 업로드', () => {
   });
 });
 
-describe('remote knowledge api: 색인 이벤트와 오류', () => {
-  it('색인 상태 이벤트만 전달한다', () => {
-    const { rpc } = fakeRpc();
-    const { api, emit } = makeApi({ rpc });
-    const got: unknown[] = [];
-    api.onIndexState?.((s) => got.push(s));
-    emit('knowledge.index', { kbId: 'kb1' });
-    emit('knowledge', {});
-    expect(got).toEqual([{ kbId: 'kb1' }]);
-  });
-
+describe('remote knowledge api: 오류', () => {
   it('forbidden 판별', () => {
     expect(isRemoteForbidden(new SyncRpcCallError('forbidden', 'x'))).toBe(true);
     expect(isRemoteForbidden(new SyncRpcCallError('timeout', 'x'))).toBe(false);

@@ -136,7 +136,7 @@ describe('skills', () => {
     expect(skills[4]).toMatchObject({ id: REORGANIZE_SKILL_ID, name: 'reorganize', title: '세션 재정리', builtin: true });
     expect(skills[5]).toMatchObject({ id: SCHEDULE_SKILL_ID, name: 'schedule', title: '작업 예약', builtin: true });
     expect(skills[6]).toMatchObject({ id: KNOWLEDGE_SKILL_ID, name: 'knowledge', title: '지식베이스 탐색', builtin: true });
-    expect(skills[6]!.prompt).toContain('Glob');
+    expect(skills[6]!.prompt).toContain('listKnowledgeDirectory');
     expect(skills.every((s) => isSkillRef(skillRef(s)))).toBe(true);
   });
 
@@ -239,13 +239,13 @@ describe('upgradeBuiltinSkills', () => {
     expect(upgradeBuiltinSkills([{ ...legacy, prompt: `${legacy.prompt} 내 규칙` }, cur, ...defaultSkills(1).slice(1)])).toEqual([]);
   });
 
-  it('고치지 않은 예전 지식베이스 탐색 스킬(5개 언어)을 유형별 탐색 지시로 올린다 (ADR-131)', () => {
+  it('고치지 않은 예전 지식베이스 탐색 스킬(5개 언어, Glob·유형별 하이브리드 지시 모두)을 새 지시로 올린다 (ADR-137)', () => {
     const cur = defaultSkills(1).find((s) => s.id === KNOWLEDGE_SKILL_ID)!;
-    // 새 지시: 유형 구분·코드베이스 도구·벡터 금지·출처 형식·인젝션 경계
-    for (const want of ['코드베이스', '문서', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile', 'searchKnowledge', ':L', 'p.12', '지시가 아니다', '(일반 지식)'])
+    // 새 지시: 필요할 때만 도구 사용·출처 형식·인젝션 경계·벡터 검색 없음
+    for (const want of ['필요할 때만', 'listKnowledgeDirectory', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile', ':L', 'p.12', '지시가 아니다', '(일반 지식)'])
       expect(cur.prompt).toContain(want);
-    expect(cur.prompt).toMatch(/코드베이스에는 `searchKnowledge`.*쓰지 않는다/);
-    expect(LEGACY_KNOWLEDGE_PROMPTS).toHaveLength(5);
+    expect(cur.prompt).not.toMatch(/searchKnowledge|벡터|의미 검색/);
+    expect(LEGACY_KNOWLEDGE_PROMPTS).toHaveLength(10);
     for (const old of LEGACY_KNOWLEDGE_PROMPTS) {
       expect(old).not.toBe(cur.prompt);
       const [up, ...rest] = upgradeBuiltinSkills([{ ...cur, title: '옛 제목', prompt: `${old}\n` }], 7);
@@ -261,9 +261,10 @@ describe('upgradeBuiltinSkills', () => {
       setLocale(l);
       try {
         const p = defaultSkills(1).find((s) => s.id === KNOWLEDGE_SKILL_ID)!.prompt;
-        for (const tool of ['listKnowledgeDirectory', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile', 'searchKnowledge', 'getKnowledgeOutline'])
+        for (const tool of ['listKnowledgeDirectory', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile'])
           expect(p, `${l} ${tool}`).toContain(tool);
         expect(p).toContain('README');
+        expect(p).not.toContain('searchKnowledge');
       } finally {
         setLocale('ko');
       }

@@ -1387,3 +1387,62 @@
 - **배경**: 휴대폰을 헤드리스 `octobooks serve`(rpc 없음 → `manage` 기능 미광고)에 연결하면 예약 관리·지식베이스가 "불러오는 중"에서 멈추고 프롬프트 관리는 읽기 전용이 됐다. sync 클라이언트가 스냅샷에서 `manage`를 `undefined → false`로 바꾸지 않아(`!!undefined === false`) 화면이 계속 스냅샷 전 상태로 판단했다.
 - **결정**: 스냅샷을 받으면 `manage`를 항상 불리언으로 확정한다. 미지원 안내 문구는 "업데이트하세요" 대신 "연결된 PC가 지원하지 않음, 최신 데스크톱 앱에 연결(serve는 미지원)"로 바꾼다(5개 언어). 헤드리스 서버의 원격 관리 rpc 지원은 범위 밖.
 - **롤백**: client.ts 한 줄과 문구만 되돌리면 된다. 데이터 형식 변화 없음.
+
+### ADR-136 · 2026-11-09 · 벡터·RAG 파이프라인과 KB 유형 완전 제거 → 모든 KB를 Agentic 탐색으로 통일
+- **배경**: 사용자 요청. 문서형 KB의 벡터 색인(FTS5+임베딩+RRF)과 유형 구분 때문에 구조가 복잡했다. 많은 파일을 넣으면 색인·통계 때문에 느렸고, 코드와 문서를 따로 관리해야 했다.
+- **결정**:
+  - core rag 벡터 모듈, bridge 색인기·워커·sqlite 저장소, `searchKnowledge` 도구, 데스크톱 ragWorker, 색인·유형 관련 API와 UI를 모두 지운다.
+  - KB는 `files/` 폴더 하나다. MCP 도구(findFiles·grep·list·read·outline·defs)로 탐색한다.
+  - `linkedPath`가 있는 구버전 코드베이스 KB는 읽기 전용으로 계속 탐색한다.
+  - 시작할 때 `<kb>/index*.sqlite*`와 `<kb>/backup/`을 지운다. 파생 데이터이며, 멱등이고 `files/`는 건드리지 않는다.
+  - `meta.json`의 kind, excludes, settings 필드는 읽을 때 무시한다.
+  - 메시지의 citations와 ragQuery는 더 이상 만들지 않는다. 기존 데이터에 남은 필드는 무시한다.
+- **대안**: 문서형만 남기고 벡터는 옵션으로 둔다. 사용자가 완전 제거를 요구했으므로 기각했다.
+- **롤백**: 이전 릴리스(v0.58.x)로 되돌리면 색인을 다시 만든다(원본 파일이 보존됨).
+
+### ADR-137 · 2026-11-09 · 사전 검색 제거, KB 사용은 질문에 따라 모델이 결정
+- **배경**: 학습에 KB가 연결돼 있으면 store가 모든 메시지마다 retrieveForChat(재작성→검색→충분성→확장)을 돌렸다. 그래서 "5분 뒤 퀴즈 내 줘" 같은 요청에도 KB를 검색했다(오류).
+- **결정**:
+  - store는 `knowledgeIds`만 넘긴다.
+  - bridge 시스템 안내에 연결된 KB의 이름과 설명, 그리고 조건부 사용 규칙을 넣는다. 규칙: 질문이 이 자료의 내용을 요구할 때만 도구를 쓰고, 일정·타이머·예약·퀴즈 출제·잡담·일반 지식에는 쓰지 않는다.
+  - skill-knowledge 지시(5개 언어)도 같은 규칙과 "연결된 KB 폴더 탐색"으로 바꾼다. 이전 기본 문구는 LEGACY 업그레이드로 교체한다.
+  - RagSettings(검색 모드)와 설정 화면을 지운다.
+- **롤백**: store의 knowledgeIds 전달은 그대로이므로 안내 문구만 바꾸면 된다.
+
+### ADR-138 · 2026-11-09 · GitHub 가져오기: clone(.git 유지·pull) / ZIP(압축 파일)
+- **결정**:
+  - clone 방식:
+    - 실행: `git clone --depth 1 --single-branch --no-tags`로 받고 `.git`을 남긴다.
+    - 갱신: `pullGit`가 `git pull --ff-only --depth 1`을 실행한다.
+    - git 하드닝:
+      - `core.symlinks=false`.
+      - `credential.helper=`.
+      - `core.hooksPath=/dev/null`.
+      - `core.fsmonitor=false`.
+      - `GIT_CONFIG_NOSYSTEM=1`.
+      - `GIT_TERMINAL_PROMPT=0`.
+  - zip 방식:
+    - `codeload.github.com/<owner>/<repo>/tar.gz/HEAD`를 받아 Node zlib와 내장 tar 파서로 푼다.
+    - 받지 않는 것: 링크, 장치 파일, 절대·`..` 경로.
+    - 파일 크기, 개수, 총량 한도를 적용한다.
+    - UI에는 "ZIP 다운로드(이력 없음)"로 표시한다. 형식이 tar.gz인 이유는 zip 해제 의존성을 추가하지 않기 위해서다.
+  - 출처 기록(`meta.sources`)에 mode를 남긴다. tree 항목의 `source`로 UI가 Pull 버튼을 정한다.
+  - mode가 없는 구버전 클론(.git 삭제됨)은 zip과 같게 취급한다.
+- **대안**: zip 라이브러리(yauzl 등)를 추가하는 방안. 의존성과 공격면이 늘어 기각했다.
+
+### ADR-139 · 2026-11-09 · 지식베이스 팝업 단계별 로딩
+- **결정**:
+  - `tree(id, dir)`에서 dir을 필수로 바꾼다. 한 단계만 읽고 폴더를 먼저 보여 준다.
+  - 팝업을 열면 `list()`(캐시 통계)와 선택한 KB의 `tree(id,'')`만 부른다.
+  - 하위 폴더는 클릭할 때 부른다(브레드크럼 탐색).
+  - 불러오는 동안 스피너를 보인다.
+  - 색인 상태나 출처 목록은 따로 부르지 않는다.
+- **롤백**: UI만 되돌리면 된다.
+
+### ADR-140 · 2026-11-09 · 문서(PDF) Agentic 탐색: 텍스트 캐시
+- **결정**:
+  - grep, read, outline 도구가 PDF를 만나면 pdfjs로 텍스트를 뽑아 쓴다.
+  - 뽑은 텍스트는 `<kb>/cache/text/<sha1(path)>.txt`에 저장한다. 원본 크기·mtime을 함께 기록하고, 둘이 바뀌면 다시 뽑는다.
+  - 결과 경로는 원래 PDF 경로로 보고한다.
+  - 그 밖의 바이너리는 binary_file로 처리한다.
+  - 캐시는 파생 데이터이므로 지워도 된다.

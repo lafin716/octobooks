@@ -1,13 +1,17 @@
 import 'fake-indexeddb/auto';
-import { splitUpload, SyncRpcFailure, uploadChunkArgs, type DesktopKnowledgeApi } from '@branch/core';
+import { splitUpload, SyncRpcFailure, uploadChunkArgs, type DesktopKnowledgeApi, type SyncRpcMethod } from '@branch/core';
 import { describe, expect, it, vi } from 'vitest';
 
 const added: { id: string; name: string; size: number; dest?: string }[] = [];
 const removed: string[] = [];
+const trees: Array<[string, string]> = [];
+const pulled: Array<[string, string]> = [];
 const fakeKnowledge = {
   list: async () => [],
   create: async (name: string) => ({ id: 'kbabc123', name }),
   remove: async (id: string) => { removed.push(id); },
+  tree: async (id: string, dir: string) => { trees.push([id, dir]); return []; },
+  pullGit: async (id: string, path: string) => { pulled.push([id, path]); return { added: [], skipped: 0 }; },
   removeEntry: async () => { throw new Error("Error invoking remote method 'knowledge:removeEntry': Error: 디스크 오류"); },
   addFiles: async (id: string, files: { name: string; data: Uint8Array }[], dest?: string) => {
     for (const f of files) added.push({ id, name: f.name, size: f.data.length, ...(dest ? { dest } : {}) });
@@ -41,8 +45,26 @@ describe('PC 원격 관리 처리기 (ADR-116)', () => {
     const { h, events } = setup();
     await h.handle('p', 'knowledge.create', ['노트']);
     expect(events).toEqual(['knowledge']);
-    expect(await code(h.handle('p', 'knowledge.docs', ['kbabc123']))).toBe('unsupported');
+    // 허용 목록 밖의 메서드(색인·docs 등)는 처리하지 않는다
+    expect(await code(h.handle('p', 'knowledge.docs' as unknown as SyncRpcMethod, ['kbabc123']))).toBe('invalid');
     expect(await code(h.handle('p', 'knowledge.preview', ['kbabc123', 'a.md']))).toMatch(/^error:/);
+  });
+
+  it('tree는 폴더 경로(dir)가 있어야 하고, 있으면 그 단계만 조회한다', async () => {
+    const { h } = setup();
+    expect(await code(h.handle('p', 'knowledge.tree', ['kbabc123']))).toBe('invalid');
+    await h.handle('p', 'knowledge.tree', ['kbabc123', 'docs']);
+    expect(trees).toEqual([['kbabc123', 'docs']]);
+  });
+
+  it('cloneGit는 mode가 clone 또는 zip일 때만 받고, pullGit은 경로를 넘긴다', async () => {
+    const { h, events } = setup();
+    expect(await code(h.handle('p', 'knowledge.cloneGit', ['kbabc123', 'https://github.com/o/r', { mode: 'bogus' }]))).toBe('invalid');
+    expect(await code(h.handle('p', 'knowledge.pullGit', ['kbabc123']))).toBe('invalid');
+    expect(events).toEqual([]);
+    await h.handle('p', 'knowledge.pullGit', ['kbabc123', 'repo-a']);
+    expect(pulled).toEqual([['kbabc123', 'repo-a']]);
+    expect(events).toEqual(['knowledge']);
   });
 
   it('원격 삭제가 꺼져 있으면 forbidden, 켜져 있으면 지운다', async () => {

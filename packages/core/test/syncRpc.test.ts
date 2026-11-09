@@ -9,8 +9,11 @@ import { isSyncServerMsg, validateSyncClientMsg, type SyncClientMsg, type SyncSe
 import {
   base64Length,
   createUploadAssembler,
+  isSyncRpcMethod,
   splitUpload,
+  SYNC_EVENT_TOPICS,
   SYNC_RPC_LIMITS,
+  SYNC_RPC_METHODS,
   SyncRpcFailure,
   uploadChunkArgs,
   uploadChunkFromArgs,
@@ -32,8 +35,11 @@ describe('validateRpcArgs', () => {
   it('accepts known methods with well-formed args and fills optional ones', () => {
     expect(validateRpcArgs('host.info', [])).toEqual([]);
     expect(validateRpcArgs('knowledge.rename', ['kbabc123', '새 이름'])).toEqual(['kbabc123', '새 이름']);
-    expect(validateRpcArgs('knowledge.docs', ['kbabc123'])).toEqual(['kbabc123', undefined]);
-    expect(validateRpcArgs('knowledge.reindex', ['kbabc123', { full: true }])).toEqual(['kbabc123', { full: true }]);
+    expect(validateRpcArgs('knowledge.cloneGit', ['kbabc123', 'https://github.com/a/b'])).toEqual(['kbabc123', 'https://github.com/a/b', undefined]);
+    expect(validateRpcArgs('knowledge.cloneGit', ['kbabc123', 'https://github.com/a/b', { mode: 'zip' }])).toEqual(['kbabc123', 'https://github.com/a/b', { mode: 'zip' }]);
+    expect(validateRpcArgs('knowledge.pullGit', ['kbabc123', 'pkg/a.go'])).toEqual(['kbabc123', 'pkg/a.go']);
+    expect(validateRpcArgs('knowledge.tree', ['kbabc123', 'src'])).toEqual(['kbabc123', 'src']);
+    expect(validateRpcArgs('knowledge.setDescription', ['kbabc123', '설명'])).toEqual(['kbabc123', '설명']);
     const input = { title: 't', prompt: 'p', runAt: '2026-11-06T09:00', repeat: 'none' };
     expect(validateRpcArgs('schedules.save', [input, 's-1'])).toEqual([input, 's-1', undefined, undefined]);
   });
@@ -56,9 +62,18 @@ describe('validateRpcArgs', () => {
     expect(validateRpcArgs('knowledge.list', 'x')).toBe(null);
   });
 
-  it('knowledge.source rejects path separators and dot segments', () => {
-    expect(validateRpcArgs('knowledge.source', ['kbabc123', 'notes.md'])).toEqual(['kbabc123', 'notes.md']);
-    for (const bad of ['a/b', 'a\\b', '.', '..', '']) expect(validateRpcArgs('knowledge.source', ['kbabc123', bad])).toBeNull();
+  it('cloneGit의 mode는 알려진 값만, tree의 dir은 필수 문자열', () => {
+    expect(validateRpcArgs('knowledge.cloneGit', ['kbabc123', 'https://github.com/a/b', { mode: 'nope' }])).toBeNull();
+    expect(validateRpcArgs('knowledge.tree', ['kbabc123'])).toBeNull();
+    expect(validateRpcArgs('knowledge.tree', ['kbabc123', 3])).toBeNull();
+    expect(validateRpcArgs('knowledge.pullGit', ['kbabc123', '/abs'])).toBeNull();
+  });
+  it('인덱스·벡터 메서드와 index 이벤트는 더 이상 허용하지 않는다', () => {
+    for (const m of ['knowledge.reindex', 'knowledge.docs', 'knowledge.sources', 'knowledge.source', 'knowledge.updateSource', 'knowledge.indexStates', 'knowledge.cancelIndex', 'knowledge.getIndexSettings', 'knowledge.setIndexSettings']) {
+      expect(isSyncRpcMethod(m), m).toBe(false);
+    }
+    expect(SYNC_RPC_METHODS).toContain('knowledge.pullGit');
+    expect(SYNC_EVENT_TOPICS).not.toContain('knowledge.index');
   });
 
   it('checks upload chunk consistency', () => {

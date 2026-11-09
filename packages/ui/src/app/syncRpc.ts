@@ -6,7 +6,7 @@ import {
   uploadChunkFromArgs,
   validateRpcArgs,
   type DesktopKnowledgeApi,
-  type KnowledgeIndexSettings,
+  isGitImportMode,
   type Schedule,
   type ScheduleInput,
   type SkillRef,
@@ -134,11 +134,19 @@ export function createSyncRpcHandler(deps: SyncRpcDeps) {
         requireDelete(peerId);
         return changed(() => kbApi().remove(s(0)));
       case 'knowledge.tree':
-        return ipc(() => kbApi().tree(s(0), args[1] as string | undefined));
+        return ipc(() => kbApi().tree(s(0), s(1)));
       case 'knowledge.addLink':
         return changed(() => kbApi().addLink(s(0), s(1)));
-      case 'knowledge.cloneGit':
-        return changed(() => kbApi().cloneGit(s(0), s(1)));
+      case 'knowledge.cloneGit': {
+        // 가져오기 방식은 생략하거나 clone·zip 중 하나여야 한다 (ADR-138)
+        const opt = args[2];
+        // 생략(undefined·null)은 core 명세(opt)와 같게 허용한다
+        if (opt != null && !(typeof opt === 'object' && isGitImportMode((opt as { mode?: unknown }).mode))) throw new SyncRpcFailure('invalid');
+        const mode = opt == null ? undefined : (opt as { mode: 'clone' | 'zip' }).mode;
+        return changed(() => kbApi().cloneGit(s(0), s(1), mode ? { mode } : undefined));
+      }
+      case 'knowledge.pullGit':
+        return changed(() => kbApi().pullGit(s(0), s(1)));
       case 'knowledge.removeEntry':
         requireDelete(peerId);
         return changed(() => kbApi().removeEntry(s(0), s(1)));
@@ -151,42 +159,6 @@ export function createSyncRpcHandler(deps: SyncRpcDeps) {
       case 'knowledge.setDescription': {
         const api = kbApi();
         return changed(() => need(api.setDescription).call(api, s(0), s(1)));
-      }
-      case 'knowledge.indexStates': {
-        const api = kbApi();
-        return ipc(() => need(api.indexStates).call(api, args[0] as string[] | undefined));
-      }
-      case 'knowledge.reindex': {
-        const api = kbApi();
-        return ipc(() => need(api.reindex).call(api, s(0), args[1] as { full?: boolean } | undefined));
-      }
-      case 'knowledge.cancelIndex': {
-        const api = kbApi();
-        return ipc(() => need(api.cancelIndex).call(api, s(0)));
-      }
-      case 'knowledge.docs': {
-        const api = kbApi();
-        return ipc(() => need(api.docs).call(api, s(0), args[1] as string | undefined));
-      }
-      case 'knowledge.getIndexSettings': {
-        const api = kbApi();
-        return ipc(() => need(api.getIndexSettings).call(api, s(0)));
-      }
-      case 'knowledge.setIndexSettings': {
-        const api = kbApi();
-        return changed(() => need(api.setIndexSettings).call(api, s(0), args[1] as KnowledgeIndexSettings));
-      }
-      case 'knowledge.sources': {
-        const api = kbApi();
-        return ipc(() => need(api.sources).call(api, s(0)));
-      }
-      case 'knowledge.updateSource': {
-        const api = kbApi();
-        return changed(() => need(api.updateSource).call(api, s(0), s(1)));
-      }
-      case 'knowledge.source': {
-        const api = kbApi();
-        return ipc(() => need(api.source).call(api, s(0), s(1)));
       }
       case 'knowledge.upload': {
         const api = kbApi();
@@ -208,7 +180,7 @@ export function createSyncRpcHandler(deps: SyncRpcDeps) {
       uploads.delete(peerId);
     },
     /**
-     * PC 쪽 변화(예약 엔진 실행·PC에서 고친 예약·프롬프트, 지식베이스 진행률·색인 상태)를 방송한다.
+     * PC 쪽 변화(예약 엔진 실행·PC에서 고친 예약·프롬프트, 지식베이스 진행률)를 방송한다.
      * 모든 모듈을 읽은 뒤(시작 시) 부른다. 해제 함수를 돌려준다.
      */
     attachEvents(): () => void {
@@ -229,8 +201,6 @@ export function createSyncRpcHandler(deps: SyncRpcDeps) {
       const api = desktop?.knowledge;
       const offProgress = api?.onProgress?.((p) => deps.emit('knowledge.progress', p));
       if (offProgress) offs.push(offProgress);
-      const offIndex = api?.onIndexState?.((s) => deps.emit('knowledge.index', s));
-      if (offIndex) offs.push(offIndex);
       return () => offs.forEach((off) => off());
     },
   };

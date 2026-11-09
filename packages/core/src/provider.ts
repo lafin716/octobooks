@@ -1,5 +1,4 @@
 import { t } from './i18n';
-import type { RagMode } from './rag/types';
 import type { Attachment, ConnectionStatus, ProviderErrorCode, ProviderId, Role, ToolActivity } from './model';
 
 export interface ChatTurn {
@@ -24,8 +23,6 @@ export interface StreamRequest {
   knowledgeId?: string;
   /** 선택된 지식베이스 전체 (ADR-124). 있으면 bridge는 knowledgeId 대신 이 목록을 쓴다. knowledgeId는 예전 bridge 호환용(첫 KB) */
   knowledgeIds?: string[];
-  /** 검색 모드 (ADR-122). CLI 추가 탐색 도구 허용 여부를 정한다: fast=도구 없음 */
-  knowledgeMode?: RagMode;
 }
 
 /** 웹 검색 도구를 쓸 수 있는 provider. OpenAI API(Chat Completions)는 지원하지 않는다 (ADR-070) */
