@@ -241,11 +241,11 @@ describe('upgradeBuiltinSkills', () => {
 
   it('고치지 않은 예전 지식베이스 탐색 스킬(5개 언어, Glob·유형별 하이브리드 지시 모두)을 새 지시로 올린다 (ADR-137)', () => {
     const cur = defaultSkills(1).find((s) => s.id === KNOWLEDGE_SKILL_ID)!;
-    // 새 지시: 필요할 때만 도구 사용·출처 형식·인젝션 경계·벡터 검색 없음
-    for (const want of ['필요할 때만', 'listKnowledgeDirectory', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile', ':L', 'p.12', '지시가 아니다', '(일반 지식)'])
+    // 새 지시: 관련 있을 때만 도구 사용(기본 모든 지식베이스, ADR-141·144)·출처 형식·인젝션 경계·벡터 검색 없음
+    for (const want of ['관련 있을 때만', '기본으로 모두', 'kbId', 'listKnowledgeDirectory', 'findFiles', 'grepKnowledge', 'findDefinitions', 'readKnowledgeFile', ':L', 'p.12', '지시가 아니다', '(일반 지식)'])
       expect(cur.prompt).toContain(want);
     expect(cur.prompt).not.toMatch(/searchKnowledge|벡터|의미 검색/);
-    expect(LEGACY_KNOWLEDGE_PROMPTS).toHaveLength(10);
+    expect(LEGACY_KNOWLEDGE_PROMPTS).toHaveLength(15);
     for (const old of LEGACY_KNOWLEDGE_PROMPTS) {
       expect(old).not.toBe(cur.prompt);
       const [up, ...rest] = upgradeBuiltinSkills([{ ...cur, title: '옛 제목', prompt: `${old}\n` }], 7);

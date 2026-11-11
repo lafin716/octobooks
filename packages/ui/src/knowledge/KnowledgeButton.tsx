@@ -14,8 +14,8 @@ import { useSessionKnowledge } from './sessionKnowledge';
  */
 export function KnowledgeButton({ sessionId, compact }: { sessionId: ID; compact?: boolean }) {
   const [open, setOpen] = useState(false);
-  const { ids, inherited } = useSessionKnowledge(sessionId);
-  const linked = ids.length > 0;
+  const { ids, inherited, all } = useSessionKnowledge(sessionId);
+  const linked = all || ids.length > 0;
   if (!remoteMode && !knowledgeApi()) return null;
   const label = t('knowledge.button.title');
   return (
@@ -28,6 +28,7 @@ export function KnowledgeButton({ sessionId, compact }: { sessionId: ID; compact
         data-knowledge-button=""
         data-linked={linked ? '' : undefined}
         data-inherited={linked && inherited ? '' : undefined}
+        data-all={all ? '' : undefined}
         onClick={() => setOpen(true)}
         className={cn(
           'relative inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-2 text-[12px] text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg',

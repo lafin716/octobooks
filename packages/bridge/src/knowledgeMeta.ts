@@ -14,6 +14,8 @@ export interface KbMetaView {
   name: string;
   /** 읽기 전용 연결 폴더 (절대 경로, 구버전 데이터) */
   linkedPath?: string;
+  /** 사용자가 쓰거나 업로드 때 자동으로 붙은 설명 (ADR-142). 모델이 질문과 관련 있는지 판단하는 데 쓴다 */
+  description?: string;
 }
 
 /** meta.json을 읽는다. 없거나 깨졌거나 id 형식이 틀리면 undefined */
@@ -29,7 +31,8 @@ export function readKbMeta(root: string, id: string): KbMetaView | undefined {
   }
   const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 200) : id;
   const linkedPath = typeof raw.linkedPath === 'string' && path.isAbsolute(raw.linkedPath) ? raw.linkedPath : undefined;
-  return { id, name, ...(linkedPath ? { linkedPath } : {}) };
+  const description = typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : undefined;
+  return { id, name, ...(linkedPath ? { linkedPath } : {}), ...(description ? { description } : {}) };
 }
 
 /**

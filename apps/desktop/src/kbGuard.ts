@@ -1,6 +1,6 @@
 // 지식베이스 IPC의 인자 검증 (ADR-136). Electron에 의존하지 않는 순수 모듈이라 단위 테스트한다.
 // 렌더러 입력은 여기서 다시 확인한다. 종류·색인·벡터 정책은 없다 (모든 KB가 같은 폴더 탐색 방식을 쓴다).
-import { isGitImportMode, isKnowledgeId, isKnowledgePath, type GitImportMode, type KnowledgeCreateOptions } from '@branch/core';
+import { KNOWLEDGE_DESCRIPTION_MAX, isGitImportMode, isKnowledgeId, isKnowledgePath, type GitImportMode, type KnowledgeCreateOptions } from '@branch/core';
 
 export class KbArgError extends Error {
   constructor(readonly field: string) {
@@ -20,7 +20,7 @@ export function kbRelPathArg(v: unknown, field = 'path'): string {
 }
 
 export function kbDescriptionArg(v: unknown): string {
-  if (typeof v !== 'string' || v.length > 500) throw new KbArgError('description');
+  if (typeof v !== 'string' || v.length > KNOWLEDGE_DESCRIPTION_MAX) throw new KbArgError('description');
   return v.trim();
 }
 

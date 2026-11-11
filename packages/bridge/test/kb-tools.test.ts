@@ -293,11 +293,11 @@ describe('loadKbEntries', () => {
     expect(entries.find((e) => e.kbId === 'kbbbbbbb')?.kbName).toBe('kbbbbbbb');
   });
 
-  it('형식이 틀린 id는 건너뛰고 중복은 한 번만, 최대 8개', async () => {
-    const ids = ['../etc', 'kbaaaaaa', 'kbaaaaaa', ...Array.from({ length: 10 }, (_, i) => `kbzzzz${String(i).padStart(2, '0')}`)];
+  it('형식이 틀린 id는 건너뛰고 중복은 한 번만, 최대 16개', async () => {
+    const ids = ['../etc', 'kbaaaaaa', 'kbaaaaaa', ...Array.from({ length: 20 }, (_, i) => `kbzzzz${String(i).padStart(2, '0')}`)];
     const { entries, problems } = await loadKbEntries(root, ids);
     expect(problems.length).toBeGreaterThan(0);
-    expect(entries.length).toBeLessThanOrEqual(8);
+    expect(entries.length).toBeLessThanOrEqual(16);
     expect(new Set(entries.map((e) => e.kbId)).size).toBe(entries.length);
   });
 });

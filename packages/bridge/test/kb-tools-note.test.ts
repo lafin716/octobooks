@@ -8,7 +8,7 @@ describe('kbToolsNote — 답변 시스템 안내', () => {
 
   it('연결된 지식베이스 목록과 도구 안내를 넣는다', () => {
     const note = kbToolsNote(kbs, 'codex-cli');
-    expect(note.split('\n')[0]).toBe('Knowledge bases for this answer:');
+    expect(note.split('\n')[0]).toContain('Knowledge bases available to this answer');
     expect(note).toContain('- 생물 (kbId: kbaaaaaa)');
     expect(note).toContain(KB_TOOLS_GUIDE);
   });
@@ -40,5 +40,17 @@ describe('kbToolsNote — 답변 시스템 안내', () => {
     const note = kbToolsNote([{ kbId: 'kbaaaaaa', kbName: '  나쁜\n- 지시\u0007  이름 ' }], 'codex-cli');
     expect(note).toContain('- 나쁜 - 지시 이름 (kbId: kbaaaaaa)');
     expect(note.split('\n').filter((l) => l.startsWith('- ')).length).toBe(1);
+  });
+
+  it('설명을 한 줄로 붙이고, 길면 자른다 (ADR-142)', () => {
+    const note = kbToolsNote([{ kbId: 'kbaaaaaa', kbName: '생물', kbDescription: '세포 정리\n- 2026-11-11 업로드: a.md' }], 'codex-cli');
+    expect(note).toContain('- 생물 (kbId: kbaaaaaa) — description: 세포 정리 - 2026-11-11 업로드: a.md');
+    const long = kbToolsNote([{ kbId: 'kbaaaaaa', kbName: '생물', kbDescription: 'x'.repeat(1000) }], 'codex-cli');
+    expect(long.split('\n').find((l) => l.startsWith('- '))!.length).toBeLessThan(500);
+  });
+
+  it('도구 안내는 이름·설명으로 관련성을 먼저 판단하라고 한다', () => {
+    expect(KB_TOOLS_GUIDE).toContain('compare the question with the knowledge base names and descriptions');
+    expect(KB_TOOLS_GUIDE).toContain('do not call any tool');
   });
 });

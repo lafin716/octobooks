@@ -86,7 +86,7 @@
     "badPath": "Invalid item path",
     "badUrl": "Invalid web address (only http or https)",
     "badRepo": "Invalid GitHub repository address",
-    "badDescription": "Description must be a string of 500 characters or fewer",
+    "badDescription": "Description must be a string of 2000 characters or fewer",
     "privateHost": "Internal network addresses cannot be fetched",
     "fetchFailed": "Could not fetch the web page",
     "notHtml": "Not a web page or text, so it cannot be fetched",
@@ -108,6 +108,23 @@
     "archiveTooLarge": "The archive is too large to import",
     "archiveFormat": "The archive format is invalid",
     "archiveTooMany": "The archive contains too many entries",
-    "archiveEscape": "The archive contains a disallowed path, so it was not imported"
+    "archiveEscape": "The archive contains a disallowed path, so it was not imported",
+    "auto": {
+      "kind": {
+        "files": "Upload",
+        "folder": "Folder",
+        "github": "GitHub",
+        "web": "Web page"
+      },
+      "code": "{n} {langs} code files",
+      "doc": "{n} documents",
+      "pdf": "{n} PDFs",
+      "office": "{n} office documents",
+      "data": "{n} data files",
+      "image": "{n} images",
+      "other": "{n} other files",
+      "more": " and {n} more",
+      "topics": "topics: {list}"
+    }
   }
 }

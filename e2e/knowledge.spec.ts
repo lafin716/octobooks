@@ -203,25 +203,31 @@ test('빈 상태에서 새 지식베이스를 만들고 설명을 고친다', as
   expect(errors).toEqual([]);
 });
 
-test('지식베이스를 여러 개 학습에 연결하고 한 개만 해제한다', async ({ page }) => {
+test('기본은 모든 지식베이스 사용, 하나를 끄면 고른 목록이 되고 모두 사용으로 되돌린다', async ({ page }) => {
   const isMobile = (page.viewportSize()?.width ?? 0) < 768;
   const { main, dialog } = await openDialog(page);
+  // 아무것도 고르지 않은 학습은 모든 지식베이스를 쓴다 (ADR-141)
+  await expect(main.locator('[data-knowledge-button][data-all]')).toHaveCount(1);
   await createBase(dialog, '세포생물학');
-  await dialog.getByRole('button', { name: '연결', exact: true }).click();
   await expect(dialog.getByRole('button', { name: '연결 해제', exact: true })).toBeVisible();
-  await expect(main.locator('[data-knowledge-button][data-linked]')).toHaveCount(1);
-
   await createBase(dialog, '생화학');
-  await dialog.getByRole('button', { name: '연결', exact: true }).click();
   await expect(dialog.getByRole('button', { name: '연결 해제', exact: true })).toBeVisible();
 
+  // 하나를 끄면 나머지만 쓰는 목록이 된다
   await dialog.getByRole('button', { name: '연결 해제', exact: true }).click();
   await expect(dialog.getByRole('button', { name: '연결', exact: true })).toBeVisible();
-  // 첫 번째 지식베이스는 여전히 연결되어 있다
+  await expect(main.locator('[data-knowledge-button][data-all]')).toHaveCount(0);
   await expect(main.locator('[data-knowledge-button][data-linked]')).toHaveCount(1);
   if (!isMobile) {
     await expect(dialog.locator('li').filter({ hasText: '세포생물학' }).getByRole('button', { pressed: true })).toHaveCount(1);
   }
+
+  // 모두 사용으로 되돌린다
+  const back = dialog.getByRole('button', { name: '목록으로', exact: true });
+  if (await back.isVisible()) await back.click();
+  await dialog.getByRole('button', { name: '모두 사용', exact: true }).click();
+  await expect(main.locator('[data-knowledge-button][data-all]')).toHaveCount(1);
+  await expect(dialog.locator('[data-link-scope="all"]')).toBeVisible();
 });
 
 test('대화상자를 열면 목록과 최상위 폴더만 불러온다', async ({ page }) => {

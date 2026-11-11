@@ -7,6 +7,7 @@ import { hasScheduleIntent } from './schedules';
  * 판단은 결정적 규칙만 쓴다 (질문마다 AI를 한 번 더 부르지 않는다):
  * - 기본 스킬: 이름별 의도 표현 (예: /quiz ← "퀴즈 내 줘", /speak ← "발음 들려 줘")
  * - 그 밖의 스킬: 질문에 스킬 제목이나 명령 이름이 그대로 들어 있을 때
+ * - 지식베이스 탐색: 질문에 이 학습이 쓰는 지식베이스 이름이 들어 있을 때도 (ADR-144). 다른 의도가 분명하면 그쪽이 먼저다
  * 애매하면 고르지 않는다. 사용자는 입력창의 자동 칩을 빼서 끌 수 있다.
  */
 
@@ -15,7 +16,8 @@ const INTENTS: Record<string, RegExp> = {
   speak: /소리\s*(내|로)|음성으로|발음\s*(을|좀)?\s*(들려|듣|알려|읽|해\s*(줘|주))|(?<!(이야기|얘기|설명|소식|경험|썰)\s*(를|을|좀)?\s*)들려\s*(줘|주세요|줄래|주라)|듣고\s*싶|낭독|읽어\s*(줘|주세요|줄래)[^\n]*(소리|음성|발음)|read\s+(it\s+)?(out\s+)?aloud|pronounc|say\s+it/i,
   curriculum: /커리큘럼|curriculum|로드맵|roadmap|학습\s*(계획|순서|경로)|공부\s*(계획|순서)/i,
   book: /책\s*(으로|처럼)\s*(만들|엮|정리|써)/,
-  knowledge: /지식\s*베이스\s*(에서|안에서|속에서|안의)|(자료|문서|소스|파일)\s*(에서|속에서)\s*(찾|검색|뒤져)|knowledge\s*base\s*(search|lookup)|search\s+(the\s+)?knowledge/i,
+  knowledge:
+    /지식\s*베이스\s*(에서|안에서|속에서|안의|에\s*(있는|넣은|올린)|기준|를?\s*(찾|검색|참고|뒤져))|(자료|문서|소스|파일)\s*(에서|속에서)\s*(찾|검색|뒤져)|(내가|제가)\s*(올린|넣은|업로드한)|(올린|넣어\s*둔|업로드한)\s*(자료|문서|파일|코드|저장소)|knowledge\s*base|search\s+(the\s+)?knowledge|(in|from)\s+my\s+(uploaded\s+)?(docs|documents|notes|files|repo)/i,
 };
 
 const squash = (s: string) => s.normalize('NFC').toLowerCase().replace(/\s+/g, '');
@@ -30,8 +32,23 @@ function mentions(text: string, skill: Skill): boolean {
   return new RegExp(`(^|[^a-z0-9가-힣])${esc}($|[^a-z0-9가-힣_-])`, 'i').test(text);
 }
 
-/** 질문에 맞는 스킬. 없거나 슬래시 명령이면 null */
-export function matchSkill(text: string, skills: readonly Skill[]): Skill | null {
+/** 지식베이스 이름으로 고를 때 이름의 최소 길이 (공백 제외). 짧은 이름은 다른 말에 섞여 잘못 걸린다 */
+const KB_NAME_MIN = 3;
+
+/** 질문에 지식베이스 이름이 들어 있나 (공백·대소문자 무시) */
+export function mentionsKnowledgeName(text: string, names: readonly string[]): boolean {
+  const flat = squash(text);
+  return names.some((n) => {
+    const name = squash(n);
+    return name.length >= KB_NAME_MIN && flat.includes(name);
+  });
+}
+
+/**
+ * 질문에 맞는 스킬. 없거나 슬래시 명령이면 null.
+ * knowledgeNames: 이 학습이 쓰는 지식베이스 이름. 질문이 그 이름을 말하면 지식베이스 탐색 스킬을 고른다
+ */
+export function matchSkill(text: string, skills: readonly Skill[], knowledgeNames: readonly string[] = []): Skill | null {
   const t = text.trim();
   if (t.length < 2 || t.startsWith('/')) return null;
   // A future quiz/reading request schedules the task instead of doing it immediately.
@@ -39,7 +56,7 @@ export function matchSkill(text: string, skills: readonly Skill[]): Skill | null
     const schedule = skills.find((skill) => skill.name === 'schedule');
     if (schedule) return schedule;
   }
-  return pickSkill(t, skills);
+  return pickSkill(t, skills, knowledgeNames);
 }
 
 /**
@@ -80,14 +97,16 @@ function mentionAt(text: string, skill: Skill): number {
   return j >= 0 ? j : 0;
 }
 
-function pickSkill(t: string, skills: readonly Skill[]): Skill | null {
+function pickSkill(t: string, skills: readonly Skill[], knowledgeNames: readonly string[] = []): Skill | null {
+  const kbNamed = knowledgeNames.length > 0 && mentionsKnowledgeName(t, knowledgeNames);
   // 의도 표현이 맞는 기본 스킬이 먼저, 그다음 제목·이름이 나온 스킬. 같은 순위면 질문에서 먼저 나온 것
   let best: { skill: Skill; rank: number; at: number } | null = null;
   for (const skill of skills) {
     if (skill.name === 'schedule') continue;
     const intent = INTENTS[skill.name];
     const m = intent?.exec(t);
-    const hit = m ? { rank: 0, at: m.index } : mentions(t, skill) ? { rank: 1, at: 0 } : null;
+    const named = mentions(t, skill) || (kbNamed && skill.name === 'knowledge');
+    const hit = m ? { rank: 0, at: m.index } : named ? { rank: 1, at: 0 } : null;
     if (hit && (!best || hit.rank < best.rank || (hit.rank === best.rank && hit.at < best.at))) best = { skill, ...hit };
   }
   return best?.skill ?? null;

@@ -8,9 +8,13 @@ import { LinkBlockedError, pinnedGet } from './linkFetch';
 import { measureLinked } from './knowledgeFolder';
 import { filesRootOf } from './knowledgeMeta';
 import { parseTarGz, TarFormatError } from './tarExtract';
+import { profileUpload } from './kbDescribe';
 import {
   KNOWLEDGE_ID_RE,
+  KNOWLEDGE_DESCRIPTION_MAX,
   KNOWLEDGE_LIMITS,
+  appendAutoDescription,
+  describeUpload,
   cleanKnowledgeName,
   isGitImportMode,
   isKnowledgeId,
@@ -29,6 +33,7 @@ import {
   type KnowledgeProgress,
   type KnowledgeSource,
   type MessageKey,
+  type UploadKind,
 } from '@branch/core';
 
 /**
@@ -77,7 +82,14 @@ const MIN_FREE_FOR_ADD = 100 * 1024 * 1024;
 /** 링크 리디렉션 최대 횟수 */
 const MAX_REDIRECTS = 5;
 /** 설명 최대 길이 */
-const DESCRIPTION_MAX = 500;
+const DESCRIPTION_MAX = KNOWLEDGE_DESCRIPTION_MAX;
+
+/** 로컬 날짜 YYYY-MM-DD (자동 설명 줄 머리) */
+function localDate(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 /** 이 모듈에서 쓰는 오류 (메시지는 한국어로 렌더러에 그대로 보인다) */
 function fail(message: string): never {
@@ -1151,6 +1163,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
         await existingKb(id);
         await assertCloneFits(id, tmp);
         const rel = await placeImported(id, tmp, repo.repo, { location: `https://github.com/${repo.owner}/${repo.repo}.git`, mode: 'zip' });
+        await autoDescribe(id, [rel], 'github');
         await touch(id);
         return { added: [rel], skipped };
       });
@@ -1212,6 +1225,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
         await existingKb(id);
         await assertCloneFits(id, tmp);
         const rel = await placeImported(id, tmp, repo.repo, { location: repo.url, mode: 'clone' });
+        await autoDescribe(id, [rel], 'github');
         await touch(id);
         return { added: [rel], skipped: 0 };
       });
@@ -1353,6 +1367,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
           throw e;
         }
         await recordSources(id, sourceRows);
+        await autoDescribe(id, added, sourceRows.length && sourceRows.every((r) => r.type === 'folder') ? 'folder' : 'files');
         await touch(id);
         return { added, skipped: budget.skipped };
       });
@@ -1388,6 +1403,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
           reportCopy(budget, f.data.byteLength);
         }
         await recordSources(id, sourceRows);
+        await autoDescribe(id, added, 'files');
         await touch(id);
         return { added, skipped: budget.skipped };
       });
@@ -1409,6 +1425,7 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
         const name = `${slugify(title)}.md`;
         const rel = await addDocument(id, dstDir, name, body, budget);
         await recordSources(id, [{ type: 'web', location: url, dest: rel }]);
+        await autoDescribe(id, [rel], 'web', [title]);
         await touch(id);
         return { added: [rel], skipped: 0 };
       });
@@ -1516,6 +1533,24 @@ export function createKnowledgeStore(opts: KnowledgeStoreOptions): KnowledgeStor
       return filesRootOf(root, checkId(id)) ?? filesDir(id);
     },
   };
+
+  /**
+   * 업로드 자동 설명 (ADR-143): 넣은 항목을 훑어 "무엇을 넣었는지" 한 줄을 설명 끝에 붙인다.
+   * 업로드 자체는 이미 끝났으므로 실패해도 업로드를 실패로 만들지 않는다 (설명만 그대로 둔다).
+   */
+  async function autoDescribe(id: string, rels: string[], kind: UploadKind, names?: string[]) {
+    if (!rels.length) return;
+    try {
+      const profile = await profileUpload(filesDir(id), rels, kind, names);
+      const line = describeUpload(profile, localDate(Date.now()));
+      const meta = await readMeta(id);
+      if (!meta) return;
+      const description = appendAutoDescription(meta.description, line, DESCRIPTION_MAX);
+      if (description && description !== meta.description) await saveMeta(id, { ...meta, description });
+    } catch {
+      // 설명은 부가 정보다. 훑기에 실패해도 업로드 결과는 그대로 돌려준다
+    }
+  }
 
   /** 파일이 바뀐 뒤: 수정 시각과 크기·개수 캐시를 갱신한다 (메타 파일이 있을 때만) */
   async function touch(id: string) {

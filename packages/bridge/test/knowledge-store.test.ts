@@ -102,10 +102,10 @@ describe('knowledgeStore — 기본 관리', () => {
     expect((await store.list()).find((k) => k.id === kb.id)?.name).toBe('이름 변경');
   });
 
-  it('설명은 앞뒤 공백을 떼고 500자까지 저장하며, 빈 문자열이면 지운다', async () => {
+  it('설명은 앞뒤 공백을 떼고 2000자까지 저장하며, 빈 문자열이면 지운다', async () => {
     const kb = await store.create('설명');
-    const set = await store.setDescription(kb.id, `  ${'가'.repeat(600)}  `);
-    expect(set.description).toHaveLength(500);
+    const set = await store.setDescription(kb.id, `  ${'가'.repeat(2100)}  `);
+    expect(set.description).toHaveLength(2000);
     const cleared = await store.setDescription(kb.id, '   ');
     expect(cleared.description).toBeUndefined();
   });
@@ -563,5 +563,34 @@ describe('knowledgeStore — 일반 규칙', () => {
   it('빈 목록은 빈 배열이다 (루트가 없어도 오류가 아니다)', async () => {
     const store = createKnowledgeStore({ root: path.join(await tmp('kb-store-empty-'), 'missing'), fetch: fakeFetch(new Uint8Array()) });
     expect(await store.list()).toEqual([]);
+  });
+});
+
+describe('knowledgeStore — 업로드 자동 설명 (ADR-143)', () => {
+  it('파일·폴더를 넣을 때마다 설명 끝에 한 줄씩 붙고, 사용자 설명은 남는다', async () => {
+    const root = await tmp('kb-store-auto-');
+    const store = createKnowledgeStore({ root, fetch: fakeFetch(new Uint8Array()) });
+    const kb = await store.create('자동', { description: '내가 쓴 설명' });
+    await store.addFiles(kb.id, [{ name: 'net.md', data: enc.encode('# 클러스터 네트워킹\n\n본문') }]);
+
+    const src = await tmp('kb-store-auto-src-');
+    const proj = path.join(src, 'proj');
+    await mkdir(path.join(proj, 'src'), { recursive: true });
+    await writeFile(path.join(proj, 'package.json'), JSON.stringify({ name: 'proj', description: '작은 CLI' }));
+    await writeFile(path.join(proj, 'src', 'main.ts'), 'export {};');
+    await writeFile(path.join(proj, 'src', 'util.ts'), 'export {};');
+    await mkdir(path.join(proj, 'node_modules', 'x'), { recursive: true });
+    await writeFile(path.join(proj, 'node_modules', 'x', 'i.js'), '');
+    await store.addPaths(kb.id, [proj]);
+
+    const desc = (await store.list()).find((k) => k.id === kb.id)?.description ?? '';
+    const lines = desc.split('\n');
+    expect(lines[0]).toBe('내가 쓴 설명');
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toMatch(/^- \d{4}-\d{2}-\d{2} .*net\.md/);
+    expect(lines[2]).toContain('proj');
+    expect(lines[2]).toContain('TypeScript');
+    expect(lines[2]).toContain("'작은 CLI'");
+    expect(lines[2]).not.toContain('JavaScript');
   });
 });

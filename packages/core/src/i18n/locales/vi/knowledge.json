@@ -142,7 +142,10 @@
   "link": {
     "inherited": "Đang theo cơ sở tri thức của nhánh cha.",
     "overridden": "Chỉ nhánh này đang dùng cơ sở tri thức khác.",
-    "reset": "Theo nhánh cha"
+    "reset": "Theo nhánh cha",
+    "all": "Đang dùng tất cả cơ sở tri thức (mặc định). Chỉ tra cứu khi liên quan đến câu hỏi.",
+    "custom": "Buổi học này chỉ dùng các cơ sở tri thức đã chọn.",
+    "useAll": "Dùng tất cả"
   },
   "trace": {
     "explored": "Đã tìm kiếm cơ sở tri thức {count} lần"

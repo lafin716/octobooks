@@ -191,13 +191,13 @@ describe('bridge server — 여러 지식베이스 MCP', () => {
     expect(out.system).toContain('이름-kbbbbbbb');
   });
 
-  it('KB 개수는 8개로 자른다', async () => {
-    const ids = Array.from({ length: 9 }, (_, i) => `kbcccc${String(i).padStart(2, '0')}`);
+  it('KB 개수는 16개로 자른다', async () => {
+    const ids = Array.from({ length: 17 }, (_, i) => `kbcccc${String(i).padStart(2, '0')}`);
     for (const id of ids) mkdirSync(path.join(root, id, 'files'), { recursive: true });
     const out = await echoOf({ knowledgeIds: ids });
     const cfg = JSON.parse(out.args[out.args.indexOf('--mcp-config') + 1]!) as { mcpServers: Record<string, { args: string[] }> };
     const kbArgs = cfg.mcpServers[KB_MCP_SERVER_NAME]!.args.filter((_, i, a) => a[i - 1] === '--kb');
-    expect(kbArgs).toHaveLength(8);
+    expect(kbArgs).toHaveLength(16);
   });
 
   it('존재하지 않는 KB만 있으면 MCP를 만들지 않는다', async () => {

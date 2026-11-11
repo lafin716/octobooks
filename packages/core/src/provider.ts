@@ -23,6 +23,8 @@ export interface StreamRequest {
   knowledgeId?: string;
   /** 선택된 지식베이스 전체 (ADR-124). 있으면 bridge는 knowledgeId 대신 이 목록을 쓴다. knowledgeId는 예전 bridge 호환용(첫 KB) */
   knowledgeIds?: string[];
+  /** 세션이 목록을 정하지 않았다: bridge가 PC의 지식베이스 전체를 쓴다 (ADR-141). knowledgeIds가 있으면 그 목록이 우선 */
+  knowledgeAll?: boolean;
 }
 
 /** 웹 검색 도구를 쓸 수 있는 provider. OpenAI API(Chat Completions)는 지원하지 않는다 (ADR-070) */
@@ -48,8 +50,8 @@ export function wantsWebTools(req: Pick<StreamRequest, 'webSearch' | 'purpose'>)
 }
 
 /** 지식베이스를 붙일 요청인가: 지식베이스가 있는 일반 대화 */
-export function wantsKnowledge(req: Pick<StreamRequest, 'knowledgeId' | 'knowledgeIds' | 'purpose'>): boolean {
-  return knowledgeIdsOf(req).length > 0 && (!req.purpose || req.purpose === 'chat');
+export function wantsKnowledge(req: Pick<StreamRequest, 'knowledgeId' | 'knowledgeIds' | 'knowledgeAll' | 'purpose'>): boolean {
+  return (knowledgeIdsOf(req).length > 0 || req.knowledgeAll === true) && (!req.purpose || req.purpose === 'chat');
 }
 
 /** 요청의 지식베이스 목록: knowledgeIds 우선, 없으면 knowledgeId 하나 (ADR-124) */

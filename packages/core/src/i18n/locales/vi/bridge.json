@@ -86,7 +86,7 @@
     "badPath": "Đường dẫn mục không hợp lệ",
     "badUrl": "Địa chỉ web không hợp lệ (chỉ được dùng http hoặc https)",
     "badRepo": "Địa chỉ kho GitHub không hợp lệ",
-    "badDescription": "Mô tả phải là chuỗi tối đa 500 ký tự",
+    "badDescription": "Mô tả phải là chuỗi tối đa 2000 ký tự",
     "privateHost": "Không thể lấy dữ liệu từ địa chỉ mạng nội bộ",
     "fetchFailed": "Không tải được trang web",
     "notHtml": "Không phải trang web hay văn bản nên không thể tải",
@@ -108,6 +108,23 @@
     "archiveTooLarge": "Tệp nén quá lớn để nhập",
     "archiveFormat": "Định dạng tệp nén không hợp lệ",
     "archiveTooMany": "Tệp nén có quá nhiều mục",
-    "archiveEscape": "Tệp nén có đường dẫn không được phép nên không được nhập"
+    "archiveEscape": "Tệp nén có đường dẫn không được phép nên không được nhập",
+    "auto": {
+      "kind": {
+        "files": "Tải lên",
+        "folder": "Thư mục",
+        "github": "GitHub",
+        "web": "Trang web"
+      },
+      "code": "{n} tệp mã {langs}",
+      "doc": "{n} tài liệu",
+      "pdf": "{n} PDF",
+      "office": "{n} tài liệu văn phòng",
+      "data": "{n} tệp dữ liệu",
+      "image": "{n} hình ảnh",
+      "other": "{n} tệp khác",
+      "more": " và {n} mục khác",
+      "topics": "chủ đề: {list}"
+    }
   }
 }

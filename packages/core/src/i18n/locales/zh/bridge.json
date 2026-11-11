@@ -86,7 +86,7 @@
     "badPath": "项目路径不正确",
     "badUrl": "网页地址不正确（仅支持 http、https）",
     "badRepo": "GitHub 仓库地址不正确",
-    "badDescription": "描述必须是不超过 500 个字符的字符串",
+    "badDescription": "描述必须是不超过 2000 个字符的字符串",
     "privateHost": "无法获取内部网络地址",
     "fetchFailed": "无法获取网页",
     "notHtml": "不是网页或文本，无法获取",
@@ -108,6 +108,23 @@
     "archiveTooLarge": "压缩包过大，无法导入",
     "archiveFormat": "压缩包格式不正确",
     "archiveTooMany": "压缩包内的项目过多",
-    "archiveEscape": "压缩包包含不允许的路径，已取消导入"
+    "archiveEscape": "压缩包包含不允许的路径，已取消导入",
+    "auto": {
+      "kind": {
+        "files": "上传",
+        "folder": "文件夹",
+        "github": "GitHub",
+        "web": "网页"
+      },
+      "code": "{langs} 代码 {n} 个",
+      "doc": "文档 {n} 个",
+      "pdf": "PDF {n} 个",
+      "office": "办公文档 {n} 个",
+      "data": "数据文件 {n} 个",
+      "image": "图片 {n} 个",
+      "other": "其他文件 {n} 个",
+      "more": " 等 {n} 个",
+      "topics": "主题: {list}"
+    }
   }
 }

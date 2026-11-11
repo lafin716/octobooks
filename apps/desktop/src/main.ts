@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { createBridgeServer, createKnowledgeStore, createSkillsDir, createSttEngine, resolveCliEnv, cleanLegacyIndexes, type BridgeConnection, type KnowledgeTaskControl } from '@branch/bridge';
-import { t, cleanKnowledgeName, isHostPolicy, isKnowledgeId, isKnowledgeLinkUrl, isKnowledgePath, isLocale, setLocale, isSttAudio, isSttModelId, isSyncClientType, isSyncServerMsg, type BridgeClientMsg, type HostState, type KnowledgeProgress, type SyncServerMsg, type SyncClientMsg, type UpdateState } from '@branch/core';
+import { t, KNOWLEDGE_DESCRIPTION_MAX, cleanKnowledgeName, isHostPolicy, isKnowledgeId, isKnowledgeLinkUrl, isKnowledgePath, isLocale, setLocale, isSttAudio, isSttModelId, isSyncClientType, isSyncServerMsg, type BridgeClientMsg, type HostState, type KnowledgeProgress, type SyncServerMsg, type SyncClientMsg, type UpdateState } from '@branch/core';
 import { createHostService, type HostService } from './host';
 import { CH } from './ipc';
 import { htmlToPdf } from './pdf';
@@ -422,7 +422,7 @@ void app.whenReady().then(async () => {
     return v as string[];
   };
   const kbDesc = (v: unknown): string => {
-    if (typeof v !== 'string' || v.length > 500) throw argError('description', t('bridge.knowledge.badDescription'));
+    if (typeof v !== 'string' || v.length > KNOWLEDGE_DESCRIPTION_MAX) throw argError('description', t('bridge.knowledge.badDescription'));
     return v.trim();
   };
   kbHandle(CH.knowledgeList, () => knowledge.list());

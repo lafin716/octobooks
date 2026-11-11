@@ -86,7 +86,7 @@
     "badPath": "항목 경로가 올바르지 않습니다",
     "badUrl": "웹 주소가 올바르지 않습니다 (http, https만 가능)",
     "badRepo": "GitHub 저장소 주소가 올바르지 않습니다",
-    "badDescription": "지식베이스 설명은 500자 이하 문자열이어야 합니다",
+    "badDescription": "지식베이스 설명은 2000자 이하 문자열이어야 합니다",
     "privateHost": "내부 네트워크 주소는 가져올 수 없습니다",
     "fetchFailed": "웹 페이지를 가져올 수 없습니다",
     "notHtml": "웹 페이지나 텍스트가 아니라서 가져올 수 없습니다",
@@ -108,6 +108,23 @@
     "archiveTooLarge": "압축 파일이 너무 커서 가져올 수 없습니다",
     "archiveFormat": "압축 파일 형식이 올바르지 않습니다",
     "archiveTooMany": "압축 파일 안의 항목이 너무 많습니다",
-    "archiveEscape": "압축 파일에 허용되지 않은 경로가 있어 가져오지 않았습니다"
+    "archiveEscape": "압축 파일에 허용되지 않은 경로가 있어 가져오지 않았습니다",
+    "auto": {
+      "kind": {
+        "files": "업로드",
+        "folder": "폴더",
+        "github": "GitHub",
+        "web": "웹 페이지"
+      },
+      "code": "{langs} 코드 {n}개",
+      "doc": "문서 {n}개",
+      "pdf": "PDF {n}개",
+      "office": "오피스 문서 {n}개",
+      "data": "데이터 파일 {n}개",
+      "image": "이미지 {n}개",
+      "other": "기타 파일 {n}개",
+      "more": " 외 {n}개",
+      "topics": "주제: {list}"
+    }
   }
 }

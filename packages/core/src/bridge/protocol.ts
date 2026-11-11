@@ -34,6 +34,8 @@ export interface ChatStartMsg {
   knowledgeId?: string;
   /** 선택된 지식베이스 전체 (ADR-124). 새 bridge는 이 목록을 쓰고, 예전 bridge는 knowledgeId(첫 KB)만 본다 */
   knowledgeIds?: string[];
+  /** 목록 없이 지식베이스 전체를 쓴다 (ADR-141). 예전 bridge는 무시한다(지식베이스 없이 답한다) */
+  knowledgeAll?: boolean;
 }
 
 export type BridgeClientMsg =

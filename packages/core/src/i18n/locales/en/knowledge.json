@@ -142,7 +142,10 @@
   "link": {
     "inherited": "Following the knowledge bases of the parent branch.",
     "overridden": "Only this branch uses different knowledge bases.",
-    "reset": "Follow parent"
+    "reset": "Follow parent",
+    "all": "Using all knowledge bases (default). They are searched only when relevant to the question.",
+    "custom": "This study uses only the selected knowledge bases.",
+    "useAll": "Use all"
   },
   "trace": {
     "explored": "Explored knowledge bases {count} times"

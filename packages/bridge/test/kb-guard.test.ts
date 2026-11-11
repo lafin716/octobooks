@@ -46,11 +46,11 @@ describe('kbCreateOptsArg — 새 지식베이스 옵션', () => {
     expect(argErrorField(() => kbCreateOptsArg({ linkedPath: undefined, description: 'x' }))).toBeNull();
   });
 
-  it('객체가 아니거나 설명이 500자를 넘으면 거부한다', () => {
+  it('객체가 아니거나 설명이 2000자를 넘으면 거부한다', () => {
     expect(argErrorField(() => kbCreateOptsArg('name'))).toBe('create');
     expect(argErrorField(() => kbCreateOptsArg([]))).toBe('create');
-    expect(argErrorField(() => kbCreateOptsArg({ description: 'a'.repeat(501) }))).toBe('description');
-    expect(kbCreateOptsArg({ description: 'a'.repeat(500) }).description).toHaveLength(500);
+    expect(argErrorField(() => kbCreateOptsArg({ description: 'a'.repeat(2001) }))).toBe('description');
+    expect(kbCreateOptsArg({ description: 'a'.repeat(2000) }).description).toHaveLength(2000);
   });
 });
 

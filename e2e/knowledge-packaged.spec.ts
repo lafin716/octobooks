@@ -86,6 +86,8 @@ test('패키지 앱: 지식베이스 생성·파일/폴더 추가·재시작 후
     await stubPicker(app, [note]);
     await dialog.getByRole('button', { name: '파일 선택', exact: true }).click();
     await expect(dialog.locator('[data-entry="networking.md"]')).toBeVisible({ timeout: 20_000 });
+    // 업로드 자동 설명 (ADR-143): 파일 제목이 설명 끝에 붙는다
+    await expect(dialog.getByRole('paragraph').filter({ hasText: KB_DESC })).toContainText('Cluster Networking');
 
     await stubPicker(app, [folder]);
     await dialog.getByRole('button', { name: '파일 선택', exact: true }).click();
@@ -117,6 +119,7 @@ test('패키지 앱: 지식베이스 생성·파일/폴더 추가·재시작 후
     if (await back.isVisible().catch(() => false)) await back.click();
     await dialog.getByRole('button', { name: `상세 보기: ${KB_NAME}`, exact: true }).click();
     await expect(dialog.getByRole('paragraph').filter({ hasText: KB_DESC })).toBeVisible();
+    await expect(dialog.getByRole('paragraph').filter({ hasText: KB_DESC })).toContainText('IPAM');
     await expect(dialog.locator('[data-entry="networking.md"]')).toBeVisible();
     await dialog.getByRole('button', { name: 'guides', exact: true }).click();
     await expect(dialog.locator('[data-entry="guides/ipam.md"]')).toBeVisible();

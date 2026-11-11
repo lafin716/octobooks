@@ -33,6 +33,7 @@ import { fileToAttachment, pastedTextAttachment } from './attach';
 import { AttachmentList } from './Attachments';
 import { registerComposer } from './composerBridge';
 import { ModelChips } from './ModelChips';
+import { useKnowledgeNames } from '../knowledge/sessionKnowledge';
 
 const FILE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.java,.go,.rs,.c,.cpp,.h,.cs,.rb,.php,.swift,.kt,.sql,.yaml,.yml,.toml,.xml,.html,.css,.sh,.log';
 
@@ -96,8 +97,10 @@ export function Composer({ sessionId, compact }: { sessionId: ID; compact?: bool
   const slashOpen = slashItems.length > 0;
   useEffect(() => setSlashIndex(0), [query]);
 
+  // 질문이 지식베이스 이름을 말하면 지식베이스 탐색 스킬을 고른다 (ADR-144)
+  const kbNames = useKnowledgeNames(sessionId);
   // 슬래시 명령 없이 쓴 요청이 어떤 스킬의 용도와 맞으면 그 스킬을 자동으로 쓴다 (IMP-21)
-  const matched = !skill && autoSkill && query === null && !parseSlash(text.trim()) ? matchSkill(text, skills) : null;
+  const matched = !skill && autoSkill && query === null && !parseSlash(text.trim()) ? matchSkill(text, skills, kbNames) : null;
   // 여러 스킬을 순서대로·동시에 실행할 수는 없다: 요청이 스킬 둘 이상을 가리키면 하나를 고르게 한다 (ADR-111).
   // 예약 요청은 예약 스킬 + 작업 스킬 하나라 해당하지 않고, 작업 스킬이 둘 이상일 때만 예약에 쓸 하나를 고른다.
   const slashCmd = query === null ? parseSlash(text.trim()) : null;

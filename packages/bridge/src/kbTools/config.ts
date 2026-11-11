@@ -4,7 +4,7 @@ import { KB_TOOL_LIMITS } from '@branch/core';
 export const KB_MCP_SERVER_NAME = 'octobooks';
 export const KB_MCP_TOOL_PREFIX = `mcp__${KB_MCP_SERVER_NAME}__`;
 /** 한 번의 채팅에 붙일 수 있는 KB 수 상한 */
-export const KB_MAX_KBS_PER_CHAT = 8;
+export const KB_MAX_KBS_PER_CHAT = 16;
 
 /** 실행 경로와 인자. 데스크톱 main.ts가 Electron 실행 파일 + kbMcp.cjs로 채운다 */
 export interface KbToolsLauncher {

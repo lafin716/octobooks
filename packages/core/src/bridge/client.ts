@@ -6,10 +6,11 @@ import type { SttModelId, SttState, SttStatus } from '../stt';
 import type { BridgeClientMsg, BridgeServerMsg, BridgeStatus, CliProviderId, SttManageOp } from './protocol';
 import { CLI_PROVIDER_IDS } from './protocol';
 
-/** chat.start의 지식베이스 필드: 전체 목록 + 예전 bridge용 첫 KB (ADR-124) */
-function knowledgeFields(req: StreamRequest): { knowledgeId: string; knowledgeIds: string[] } {
+/** chat.start의 지식베이스 필드: 전체 목록 + 예전 bridge용 첫 KB (ADR-124). 목록이 없으면 전체 사용 (ADR-141) */
+function knowledgeFields(req: StreamRequest): { knowledgeId?: string; knowledgeIds?: string[]; knowledgeAll?: true } {
   const ids = knowledgeIdsOf(req);
-  return { knowledgeId: ids[0]!, knowledgeIds: ids };
+  if (ids.length) return { knowledgeId: ids[0]!, knowledgeIds: ids };
+  return req.knowledgeAll === true ? { knowledgeAll: true } : {};
 }
 
 /** 메시지 전송로. Electron IPC, WebSocket 모두 이 모양으로 감싼다 */

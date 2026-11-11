@@ -475,10 +475,13 @@ export class KbToolBudget {
 /**
  * 도구 안내 (CLI 시스템 프롬프트에 붙임, ADR-137).
  * 질문마다 모델이 지식베이스 도구를 쓸지 스스로 정한다. 앱은 미리 검색해 넣지 않는다.
+ * 판단 근거는 안내문에 나열한 KB 이름·설명이다 (ADR-142).
  */
 export const KB_TOOLS_GUIDE = [
   'Knowledge base tools (read-only): listKnowledgeDirectory, findFiles, grepKnowledge, findDefinitions, readKnowledgeFile, getKnowledgeOutline.',
-  'Use knowledge base tools only when the question needs knowledge base content (the study materials linked to this chat).',
+  'Use knowledge base tools only when the question needs knowledge base content.',
+  'First compare the question with the knowledge base names and descriptions listed above. If no knowledge base is related to the question, do not call any tool and answer directly.',
+  'If only some are related, search only those (pass their kbId). The user may also ask explicitly to look something up in their materials; then search.',
   'Do NOT use them for scheduling, timers, reminders, or later follow-ups; for quiz or question-generation requests;',
   'for small talk or greetings; or for general knowledge that the materials do not need. Answer those directly.',
   'When you do search, start broad: listKnowledgeDirectory for structure, findFiles for file or path names,',

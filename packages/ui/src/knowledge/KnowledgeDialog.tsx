@@ -1,5 +1,6 @@
 import { intlLocale, t } from '../i18n';
 import {
+  KNOWLEDGE_DESCRIPTION_MAX,
   cleanKnowledgeName,
   isKnowledgeLinkUrl,
   parseGitHubRepo,
@@ -15,7 +16,7 @@ import {
 import { ArrowLeft, ChevronRight, File, FileText, Folder, FolderOpen, GitBranch, Link2, Loader2, Maximize2, Minimize2, Pencil, Plus, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { remoteMode } from '../app/capabilities';
-import { actions } from '../app/store';
+import { actions, useApp } from '../app/store';
 import { Button, IconButton } from '../components/Button';
 import { confirm } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
@@ -88,7 +89,8 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
   /** 원격 삭제 허용. PC가 허용하지 않거나 확인 전이면 삭제 버튼을 숨긴다 (PC 로컬은 항상 허용) */
   const [allowDelete, setAllowDelete] = useState(!remote);
   const canDelete = !remote || allowDelete;
-  const { ids: linkedIds, inherited, overridden } = useSessionKnowledge(sessionId);
+  const { ids: explicitIds, inherited, overridden, all: usesAll } = useSessionKnowledge(sessionId);
+  const isRoot = useApp((s) => !s.sessions[sessionId]?.parentId);
   const [bases, setBases] = useState<KnowledgeBase[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -356,6 +358,8 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
     await reload();
   };
 
+  /** 전체 사용(기본)이면 지금 있는 지식베이스가 모두 연결된 것으로 보인다 (ADR-141) */
+  const linkedIds = usesAll ? bases.map((b) => b.id) : explicitIds;
   const isLinked = !!current && linkedIds.includes(current.id);
 
   const toggleLink = (id: string) => toggleSessionKnowledge(sessionId, linkedIds, id);
@@ -540,6 +544,20 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
                 ))}
               </select>
             </div>
+              {usesAll ? (
+                <p className="text-[12px] text-fg-2" data-link-scope="all">
+                  {t('knowledge.link.all')}
+                </p>
+              ) : (
+                isRoot && (
+                  <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-2" data-link-scope="custom">
+                    <span>{t('knowledge.link.custom')}</span>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => resetSessionKnowledge(sessionId)}>
+                      {t('knowledge.link.useAll')}
+                    </Button>
+                  </div>
+                )
+              )}
           </div>
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
             {loaded && bases.length === 0 && (
@@ -695,8 +713,8 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
                       autoFocus
                       aria-label={t('knowledge.description.label')}
                       value={draftDesc}
-                      rows={2}
-                      maxLength={500}
+                      rows={5}
+                      maxLength={KNOWLEDGE_DESCRIPTION_MAX}
                       placeholder={t('knowledge.description.placeholder')}
                       onChange={(e) => setDraftDesc(e.target.value)}
                       className="scroll-thin resize-y rounded-lg border border-line bg-surface px-3 py-2 text-[14px] text-fg outline-none focus:border-accent"
@@ -711,7 +729,7 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
                     </div>
                   </form>
                 ) : (
-                  <p className={cn('text-[14px]', current.description ? 'text-fg' : 'text-fg-2')}>{current.description || t('knowledge.description.empty')}</p>
+                  <p className={cn('max-h-40 overflow-y-auto whitespace-pre-line break-words text-[14px] scroll-thin', current.description ? 'text-fg' : 'text-fg-2')}>{current.description || t('knowledge.description.empty')}</p>
                 )}
               </div>
 

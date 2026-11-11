@@ -86,7 +86,7 @@
     "badPath": "項目のパスが正しくありません",
     "badUrl": "Web アドレスが正しくありません（http・https のみ使用できます）",
     "badRepo": "GitHub リポジトリのアドレスが正しくありません",
-    "badDescription": "説明は500文字以内の文字列にしてください",
+    "badDescription": "説明は2000文字以内の文字列にしてください",
     "privateHost": "内部ネットワークのアドレスは取り込めません",
     "fetchFailed": "Web ページを取得できません",
     "notHtml": "Web ページでもテキストでもないため、取得できません",
@@ -108,6 +108,23 @@
     "archiveTooLarge": "アーカイブが大きすぎて取り込めません",
     "archiveFormat": "アーカイブの形式が正しくありません",
     "archiveTooMany": "アーカイブ内の項目が多すぎます",
-    "archiveEscape": "許可されていないパスがあるため取り込みませんでした"
+    "archiveEscape": "許可されていないパスがあるため取り込みませんでした",
+    "auto": {
+      "kind": {
+        "files": "アップロード",
+        "folder": "フォルダー",
+        "github": "GitHub",
+        "web": "ウェブページ"
+      },
+      "code": "{langs} コード {n}件",
+      "doc": "文書 {n}件",
+      "pdf": "PDF {n}件",
+      "office": "オフィス文書 {n}件",
+      "data": "データファイル {n}件",
+      "image": "画像 {n}件",
+      "other": "その他のファイル {n}件",
+      "more": " ほか {n}件",
+      "topics": "トピック: {list}"
+    }
   }
 }

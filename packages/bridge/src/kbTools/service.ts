@@ -34,6 +34,8 @@ import { listDir, outlineOfLines, resolveInside, isMarkdownPath } from './files'
 export interface KbEntry {
   kbId: string;
   kbName: string;
+  /** KB 설명 (안내문에서 관련성 판단용, ADR-142) */
+  kbDescription?: string;
   /** 원본 루트 (<root>/<kbId>/files, 또는 읽기 전용 연결 폴더의 realpath). 이 아래만 읽는다 */
   filesRoot: string;
   /** PDF 추출 텍스트 캐시 폴더 (<root>/<kbId>/cache/text). 연결 폴더 안에는 쓰지 않는다 (ADR-140) */

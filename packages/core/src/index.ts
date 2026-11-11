@@ -8,6 +8,7 @@ export * from './attachments';
 export * from './skills';
 export * from './knowledge';
 export * from './knowledgePolicy';
+export * from './knowledgeDescribe';
 export * from './rag';
 export * from './schedules';
 export * from './skillAssist';

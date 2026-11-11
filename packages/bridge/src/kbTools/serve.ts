@@ -28,6 +28,7 @@ export async function loadKbEntries(root: string, kbIds: string[]): Promise<{ en
     entries.push({
       kbId,
       kbName: meta?.name ?? kbId,
+      ...(meta?.description ? { kbDescription: meta.description } : {}),
       filesRoot,
       cacheDir: path.join(root, kbId, 'cache', 'text'),
       ...(missing ? { missing: true } : {}),

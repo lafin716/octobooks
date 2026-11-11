@@ -1,4 +1,4 @@
-import type { DesktopKnowledgeApi, KnowledgeBase } from '@branch/core';
+import { KNOWLEDGE_DESCRIPTION_MAX, type DesktopKnowledgeApi, type KnowledgeBase } from '@branch/core';
 import { useState, type FormEvent } from 'react';
 import { t } from '../i18n';
 import { Button, IconButton } from '../components/Button';
@@ -69,7 +69,7 @@ export function KnowledgeCreate({ api, onCreated, onCancel }: KnowledgeCreatePro
             value={description}
             disabled={busy}
             rows={3}
-            maxLength={500}
+            maxLength={KNOWLEDGE_DESCRIPTION_MAX}
             placeholder={t('knowledge.create.descriptionPlaceholder')}
             onChange={(e) => setDescription(e.target.value)}
             className="scroll-thin resize-y rounded-lg border border-line bg-surface px-3 py-2 text-[14px] text-fg outline-none focus:border-accent disabled:opacity-60"

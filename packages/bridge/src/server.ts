@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { t, binaryNote, cliPrompt, isAttachment, isKnowledgeId, isSttAudio, isValidEffort, isValidModelName, KB_TOOL_NAMES, knowledgeIdsOf, providerError, withInstructions, type BridgeClientMsg, type BridgeServerMsg, type BridgeStatus, type ChatStartMsg, type StreamEvent, type SttManageMsg, type SttState } from '@branch/core';
@@ -64,6 +64,23 @@ interface KbMcpPlan {
 }
 
 /** 폴더(<root>/<id>/files)가 실제로 있는 KB id만 남긴다 */
+/**
+ * PC의 지식베이스 전체 (ADR-141). files 폴더가 있는 KB만, 최근에 바뀐 순으로 상한까지.
+ * 세션이 목록을 정하지 않았을 때(knowledgeAll) 쓴다
+ */
+export async function allKbIds(root: string, limit: number): Promise<string[]> {
+  const names = await readdir(root).catch(() => [] as string[]);
+  const found: { id: string; at: number }[] = [];
+  for (const id of names) {
+    if (!isKnowledgeId(id)) continue;
+    const files = await stat(path.join(root, id, 'files')).catch(() => null);
+    if (!files?.isDirectory()) continue;
+    const meta = await stat(path.join(root, id, 'meta.json')).catch(() => null);
+    found.push({ id, at: Math.max(meta?.mtimeMs ?? 0, files.mtimeMs) });
+  }
+  return found.sort((a, b) => b.at - a.at || a.id.localeCompare(b.id)).slice(0, limit).map((x) => x.id);
+}
+
 async function existingKbIds(root: string, ids: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const id of ids) {
@@ -176,13 +193,19 @@ export function createBridgeServer(opts: BridgeServerOptions = {}): BridgeServer
   }
 
   /**
-   * 이번 답의 지식베이스 MCP 계획 (ADR-124). 선택된 KB 중 폴더가 있는 것만 최대 8개.
+   * 이번 답의 지식베이스 MCP 계획 (ADR-124, ADR-141). 선택된 KB(없으면 전체) 중 폴더가 있는 것만 상한까지.
    * 실행 정보가 없거나 쓸 KB가 없으면 null (지식베이스 없이 답한다)
    */
   async function kbMcpFor(msg: ChatStartMsg): Promise<KbMcpPlan | null> {
     const launcher = opts.knowledgeTools;
     if (!launcher) return null;
-    const ids = await existingKbIds(launcher.root, knowledgeIdsOf(msg).filter(isKnowledgeId).slice(0, KB_MAX_KBS_PER_CHAT));
+    const chosen = knowledgeIdsOf(msg).filter(isKnowledgeId);
+    // 목록이 있으면 그 목록, 없고 knowledgeAll이면 전체 (ADR-141)
+    const ids = chosen.length
+      ? await existingKbIds(launcher.root, chosen.slice(0, KB_MAX_KBS_PER_CHAT))
+      : msg.knowledgeAll === true && !Array.isArray(msg.knowledgeIds) && !msg.knowledgeId
+        ? await allKbIds(launcher.root, KB_MAX_KBS_PER_CHAT)
+        : [];
     if (!ids.length) return null;
     const { entries } = await loadKbEntries(launcher.root, ids);
     if (!entries.length) return null;

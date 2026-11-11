@@ -128,6 +128,22 @@ export function effectiveKnowledgeIds(sessions: Record<ID, Session>, id: ID): st
   return [];
 }
 
+/**
+ * 세션이 지식베이스 목록을 정하지 않았는가 (ADR-141). 루트까지 knowledgeIds도 예전 knowledgeId도 없으면 true.
+ * 이때는 PC의 지식베이스 전체를 쓴다(bridge가 실제 목록을 정한다). []는 명시적 끔이라 false
+ */
+export function knowledgeUsesAll(sessions: Record<ID, Session>, id: ID): boolean {
+  const seen = new Set<ID>();
+  let cur: Session | undefined = sessions[id];
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    if (cur.knowledgeIds !== undefined) return false;
+    if (!cur.parentId) return !cur.knowledgeId;
+    cur = sessions[cur.parentId];
+  }
+  return false;
+}
+
 /** 이 세션의 지식베이스 목록을 부모에게서 물려받고 있는가 (가지만 해당) */
 export function knowledgeInherited(sessions: Record<ID, Session>, id: ID): boolean {
   const s = sessions[id];
@@ -555,6 +571,9 @@ export function createAppStore(opts: AppStoreOptions): AppStore {
         if (kbIds.length > 0) {
           req.knowledgeIds = kbIds;
           req.knowledgeId = kbIds[0];
+        } else if (knowledgeUsesAll(state.sessions, sessionId)) {
+          // 목록을 정하지 않은 세션은 지식베이스 전체를 쓴다 (ADR-141). 쓸지 말지는 모델이 질문마다 정한다
+          req.knowledgeAll = true;
         }
       }
       req.signal = ctrl.signal;

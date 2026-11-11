@@ -38,6 +38,7 @@ async function chat(
   server: ReturnType<typeof createBridgeServer>,
   providerId: 'claude-cli' | 'codex-cli',
   knowledgeId: unknown,
+  extra: Record<string, unknown> = {},
 ): Promise<Outcome> {
   const reqId = `rq${Math.random().toString(36).slice(2, 10)}`;
   const out: Outcome = { text: '', errors: [] };
@@ -58,6 +59,7 @@ async function chat(
     system: '튜터 지시',
     messages: [{ role: 'user', content: '질문' }],
     ...(knowledgeId === undefined ? {} : { knowledgeId }),
+    ...extra,
   } as never);
   await finished;
   return out;
@@ -147,7 +149,7 @@ describe('bridge server — 지식베이스 연결 (MCP)', () => {
     expect(echo.args[echo.args.indexOf('--tools') + 1]).toBe('');
 
     expect(echo.system).toContain('튜터 지시');
-    expect(echo.system).toContain('Knowledge bases for this answer:');
+    expect(echo.system).toContain('Knowledge bases available to this answer');
     expect(echo.system).toContain(`- 생물 (kbId: ${KB_ID})`);
     expect(echo.system).toContain(KB_TOOLS_GUIDE);
     expect(echo.system).toContain(`tool names are prefixed with ${KB_MCP_TOOL_PREFIX}`);
@@ -155,7 +157,7 @@ describe('bridge server — 지식베이스 연결 (MCP)', () => {
     const codex = createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: launcher() });
     const x = await chat(codex, 'codex-cli', KB_ID);
     const payload = JSON.parse(x.text) as { args: string[]; stdin: string };
-    expect(payload.stdin).toContain('Knowledge bases for this answer:');
+    expect(payload.stdin).toContain('Knowledge bases available to this answer');
     expect(payload.stdin).toContain(`- 생물 (kbId: ${KB_ID})`);
     expect(payload.stdin).toContain(KB_TOOLS_GUIDE);
     expect(payload.stdin).not.toContain('prefixed with');
@@ -169,7 +171,7 @@ describe('bridge server — 지식베이스 연결 (MCP)', () => {
     const plain = createBridgeServer({ cliEnv: cliEnv('echo') });
     const out = normalize((await chat(plain, 'claude-cli', KB_ID)).text) as { args: string[]; system: string };
     expect(out.args).not.toContain('--mcp-config');
-    expect(out.system).not.toContain('Knowledge bases for this answer:');
+    expect(out.system).not.toContain('Knowledge bases available to this answer');
   });
 
   it('없는 지식베이스·형식이 틀린 id는 지식베이스가 없을 때와 똑같이 답한다', async () => {
@@ -181,5 +183,30 @@ describe('bridge server — 지식베이스 연결 (MCP)', () => {
     expect(invalid.errors).toEqual([]);
     expect(normalize(unknown.text)).toEqual(normalize(plain.text));
     expect(normalize(invalid.text)).toEqual(normalize(plain.text));
+  });
+
+  it('knowledgeAll이면 PC의 지식베이스 전체를 이름·설명과 함께 쓴다 (ADR-141, ADR-142)', async () => {
+    const all = await tmp('kb-all-');
+    for (const [id, name, description] of [
+      ['kbaaaaaa', '생물', '세포·유전 정리'],
+      ['kbbbbbbb', '화학', ''],
+    ] as const) {
+      await mkdir(path.join(all, id, 'files'), { recursive: true });
+      await writeFile(path.join(all, id, 'meta.json'), JSON.stringify({ name, description }));
+    }
+    await mkdir(path.join(all, 'kbcccccc')); // files 폴더가 없으면 뺀다
+    await mkdir(path.join(all, 'not-a-kb', 'files'), { recursive: true });
+    const server = createBridgeServer({ cliEnv: cliEnv('echo'), knowledgeTools: { ...launcher(), root: all } });
+    const echo = normalize((await chat(server, 'claude-cli', undefined, { knowledgeAll: true })).text) as { args: string[]; system: string };
+    const kbArgs = mcpServerOf(echo.args).args.filter((_, i, a) => a[i - 1] === '--kb').sort();
+    expect(kbArgs).toEqual(['kbaaaaaa', 'kbbbbbbb']);
+    expect(echo.system).toContain('- 생물 (kbId: kbaaaaaa) — description: 세포·유전 정리');
+    expect(echo.system).toContain('- 화학 (kbId: kbbbbbbb)');
+
+    // 목록을 정했으면(빈 목록 포함) 전체를 쓰지 않는다
+    const off = normalize((await chat(server, 'claude-cli', undefined, { knowledgeAll: true, knowledgeIds: [] })).text) as { args: string[] };
+    expect(off.args).not.toContain('--mcp-config');
+    const one = normalize((await chat(server, 'claude-cli', undefined, { knowledgeIds: ['kbbbbbbb'], knowledgeAll: true })).text) as { args: string[] };
+    expect(mcpServerOf(one.args).args.filter((_, i, a) => a[i - 1] === '--kb')).toEqual(['kbbbbbbb']);
   });
 });
