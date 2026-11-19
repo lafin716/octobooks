@@ -26,6 +26,7 @@ import { Button } from '../components/Button';
 import { PcOfflineBanner, usePcOnline } from '../components/PcStatus';
 import { answersViaPc, remoteMode } from '../app/capabilities';
 import { cn } from '../lib/cn';
+import { useContentMax } from './SessionSettingsMenu';
 import { MicButton } from '../voice/MicButton';
 import { isUsable, providerLabel, STATUS_LABEL } from '../lib/connection';
 import { openSkillsWithAI, useSkills } from '../skills/skillsStore';
@@ -38,6 +39,7 @@ import { useKnowledgeNames } from '../knowledge/sessionKnowledge';
 const FILE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.java,.go,.rs,.c,.cpp,.h,.cs,.rb,.php,.swift,.kt,.sql,.yaml,.yml,.toml,.xml,.html,.css,.sh,.log';
 
 export function Composer({ sessionId, compact }: { sessionId: ID; compact?: boolean }) {
+  const contentMax = useContentMax();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [skill, setSkill] = useState<SkillRef | null>(null);
@@ -311,7 +313,7 @@ export function Composer({ sessionId, compact }: { sessionId: ID; compact?: bool
   );
 
   const body = (
-    <div className={cn('relative mx-auto', expanded ? 'flex min-h-0 w-full max-w-4xl flex-1 flex-col' : 'max-w-3xl')}>
+    <div className={cn('relative mx-auto', expanded ? cn('flex min-h-0 w-full flex-1 flex-col', contentMax === 'max-w-5xl' ? 'max-w-5xl' : 'max-w-4xl') : contentMax)}>
       {expanded && (
         <div className="mb-2 flex items-center gap-2 px-1">
           <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-fg">{t('chat.composer.expandInput')}</h2>
@@ -525,7 +527,7 @@ export function Composer({ sessionId, compact }: { sessionId: ID; compact?: bool
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-2xl border border-dashed border-line px-3 py-2.5 text-left text-[13px] text-muted hover:border-line-strong"
+          className={cn('mx-auto flex w-full items-center gap-2 rounded-2xl border border-dashed border-line px-3 py-2.5 text-left text-[13px] text-muted hover:border-line-strong', contentMax)}
         >
           <Maximize2 size={14} className="shrink-0" />
           <span className="truncate">{text.trim() ? text.trim().split('\n')[0] : t('chat.composer.expandingHint')}</span>

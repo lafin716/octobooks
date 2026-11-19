@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { breadcrumb, effectiveProviderId, excerptAround, type ID, type ProviderId } from '@branch/core';
-import { ChevronDown, ChevronRight, ChevronUp, Compass, CornerLeftUp, ListRestart, Quote, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Compass, CornerLeftUp, Quote, Sparkles } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { remoteMode } from '../app/capabilities';
 import { actions, useApp } from '../app/store';
@@ -15,7 +15,7 @@ import { cn } from '../lib/cn';
 import { RenameInput } from '../session/SessionMenu';
 import { PROVIDER_ORDER, providerLabel, STATUS_LABEL, statusTone } from '../lib/connection';
 import { revealAnchor } from './open';
-import { reorganizeSession } from './turnActions';
+import { SessionSettingsMenu } from './SessionSettingsMenu';
 import { renameSession } from './PagePanel';
 
 export interface SessionHeaderProps {
@@ -41,7 +41,6 @@ export function SessionHeader({ sessionId, compact, actions: extra, handleClassN
   });
   const hasDraft = useApp((s) => !!s.summaryDrafts[sessionId]);
   const streaming = useApp((s) => !!s.streaming[sessionId]);
-  const answered = useApp((s) => !!s.messages[sessionId]?.some((m) => m.role === 'assistant' && m.content.trim()));
   const quoteCollapsed = useUi((s) => s.quoteCollapsed);
   const toggleQuote = useUi((s) => s.toggleQuote);
   const [renaming, setRenaming] = useState(false);
@@ -120,16 +119,6 @@ export function SessionHeader({ sessionId, compact, actions: extra, handleClassN
             <Sparkles size={11} /> {t('chat.session.summarized')}
           </Badge>
         )}
-        {summaryButton && collapsible && quoteCollapsed && (
-          <IconButton size="sm" label={summaryLabel} disabled={streaming} onClick={requestSummary}>
-            <Sparkles size={14} className="text-anchor-line" />
-          </IconButton>
-        )}
-        {answered && !page && (
-          <IconButton size="sm" label={t('chat.session.reorganize')} data-reorganize="" disabled={streaming} onClick={() => void reorganizeSession(sessionId)}>
-            <ListRestart size={14} />
-          </IconButton>
-        )}
         {!page && <BookPdfButton sessionId={sessionId} compact={compact} />}
         {!page && <KnowledgeButton sessionId={sessionId} compact={compact} />}
         {!remoteMode && !page && <ProviderSelect sessionId={sessionId} compact={compact} />}
@@ -155,6 +144,7 @@ export function SessionHeader({ sessionId, compact, actions: extra, handleClassN
         )}
         {remoteMode && !page && <RemoteAgentPicker sessionId={sessionId} compact={compact} />}
         {remoteMode && <NavRestoreButton />}
+        <SessionSettingsMenu sessionId={sessionId} page={page} />
         {extra}
       </div>
       {ex && !quoteCollapsed && (
@@ -197,12 +187,12 @@ export function SessionHeader({ sessionId, compact, actions: extra, handleClassN
   );
 }
 
-/** 모바일에서 숨긴 세션 내비게이션을 다시 보이는 버튼 (ADR-056) */
+/** 숨긴 세션 내비게이션을 다시 보이는 버튼 (모바일 ADR-056, PC ADR-146) */
 function NavRestoreButton() {
   const mobile = useBreakpoint() === 'mobile';
-  const hidden = useUi((s) => s.navDock.hidden);
-  const setNavDock = useUi((s) => s.setNavDock);
-  if (!mobile || !hidden) return null;
+  const hidden = useUi((s) => (mobile ? s.navDock.hidden : s.navDockPc.hidden));
+  const setNavDock = useUi((s) => (mobile ? s.setNavDock : s.setNavDockPc));
+  if (!hidden) return null;
   return (
     <IconButton size="sm" label={t('chat.session.showNav')} data-nav-restore="" onClick={() => setNavDock({ hidden: false })}>
       <Compass size={15} />

@@ -1,11 +1,12 @@
 import { isMarkColor, parseTtsPrefs, type MarkColor, type TtsPrefs } from '@branch/core';
 import { create } from 'zustand';
-import { NAV_DOCK_KEY, parseNavDock, type NavDock } from '../chat/navDock';
+import { NAV_DOCK_KEY, NAV_DOCK_PC_KEY, parseNavDock, type NavDock } from '../chat/navDock';
 
 const SIDEBAR_KEY = 'branch.sidebarCollapsed';
 const SIDEBAR_WIDTH_KEY = 'branch.sidebarWidth';
 const TRIGGER_KEY = 'branch.selectionTrigger';
 const QUOTE_KEY = 'branch.quoteCollapsed';
+const WIDE_KEY = 'branch.wideView';
 const FAVORITES_KEY = 'branch.favoriteColors';
 const TTS_KEY = 'branch.tts';
 const AUTO_SKILL_KEY = 'branch.autoSkill';
@@ -41,6 +42,9 @@ interface UiState {
   /** 가지 헤더의 부모 원문 인용을 한 줄로 접기 (기기별) */
   quoteCollapsed: boolean;
   toggleQuote(): void;
+  /** 세션 본문을 넓게 보기 (기기별, 세션 설정 메뉴, ADR-145) */
+  wideView: boolean;
+  setWideView(v: boolean): void;
   /** 서식 색 즐겨찾기 (기기별) */
   favoriteColors: MarkColor[];
   toggleFavoriteColor(c: MarkColor): void;
@@ -53,6 +57,9 @@ interface UiState {
   /** 모바일 세션 내비게이션 핸들 위치·숨김 (기기별, ADR-056) */
   navDock: NavDock;
   setNavDock(patch: Partial<NavDock>): void;
+  /** 태블릿·데스크톱(≥768px) 세션 내비게이션 핸들 위치·숨김 (기기별, 모바일과 따로, ADR-146) */
+  navDockPc: NavDock;
+  setNavDockPc(patch: Partial<NavDock>): void;
   /** 태블릿·데스크톱에서 보관함을 전체 화면으로 (기기별, ADR-058) */
   vaultFull: boolean;
   toggleVaultFull(): void;
@@ -95,9 +102,9 @@ function loadTts(): TtsPrefs {
   }
 }
 
-function loadNavDock(): NavDock {
+function loadNavDock(key = NAV_DOCK_KEY): NavDock {
   try {
-    return parseNavDock(JSON.parse(load(NAV_DOCK_KEY) ?? 'null'));
+    return parseNavDock(JSON.parse(load(key) ?? 'null'));
   } catch {
     return parseNavDock(null);
   }
@@ -142,6 +149,11 @@ export const useUi = create<UiState>((set, get) => ({
     set({ quoteCollapsed });
     save(QUOTE_KEY, quoteCollapsed ? '1' : '0');
   },
+  wideView: load(WIDE_KEY) === '1',
+  setWideView: (wideView) => {
+    set({ wideView });
+    save(WIDE_KEY, wideView ? '1' : '0');
+  },
   favoriteColors: loadFavorites(),
   toggleFavoriteColor: (c) => {
     const cur = get().favoriteColors;
@@ -165,6 +177,12 @@ export const useUi = create<UiState>((set, get) => ({
     const navDock = { ...get().navDock, ...patch };
     set({ navDock });
     save(NAV_DOCK_KEY, JSON.stringify(navDock));
+  },
+  navDockPc: loadNavDock(NAV_DOCK_PC_KEY),
+  setNavDockPc: (patch) => {
+    const navDockPc = { ...get().navDockPc, ...patch };
+    set({ navDockPc });
+    save(NAV_DOCK_PC_KEY, JSON.stringify(navDockPc));
   },
   vaultFull: load(VAULT_FULL_KEY) === '1',
   toggleVaultFull: () => {

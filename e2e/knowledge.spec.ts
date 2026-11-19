@@ -219,7 +219,19 @@ test('기본은 모든 지식베이스 사용, 하나를 끄면 고른 목록이
   await expect(main.locator('[data-knowledge-button][data-all]')).toHaveCount(0);
   await expect(main.locator('[data-knowledge-button][data-linked]')).toHaveCount(1);
   if (!isMobile) {
-    await expect(dialog.locator('li').filter({ hasText: '세포생물학' }).getByRole('button', { pressed: true })).toHaveCount(1);
+    // 목록 스위치 (Q-1): 끈 지식베이스(생화학)만 꺼져 있다. 행을 눌러도 연결은 바뀌지 않는다
+    const sw = (name: string) => dialog.getByRole('switch', { name: `이 학습에서 사용: ${name}` });
+    await expect(sw('세포생물학')).toHaveAttribute('aria-checked', 'true');
+    await expect(sw('생화학')).toHaveAttribute('aria-checked', 'false');
+    await dialog.getByRole('button', { name: '상세 보기: 세포생물학', exact: true }).click();
+    await expect(dialog.getByRole('heading', { name: '세포생물학', level: 3 })).toBeVisible();
+    await expect(sw('세포생물학')).toHaveAttribute('aria-checked', 'true');
+    await expect(main.locator('[data-knowledge-button][data-linked]')).toHaveCount(1);
+    // 스위치로 끄고 다시 켠다
+    await sw('세포생물학').click();
+    await expect(sw('세포생물학')).toHaveAttribute('aria-checked', 'false');
+    await sw('세포생물학').click();
+    await expect(sw('세포생물학')).toHaveAttribute('aria-checked', 'true');
   }
 
   // 모두 사용으로 되돌린다

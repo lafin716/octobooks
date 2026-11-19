@@ -12,15 +12,28 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
   );
 }
 
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange(v: boolean): void; label: string }) {
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange(v: boolean): void;
+  label: string;
+  disabled?: boolean;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={cn('relative h-6 w-10 shrink-0 rounded-full transition-colors', checked ? 'bg-accent' : 'bg-line-strong')}
+      className={cn('relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50', checked ? 'bg-accent' : 'bg-line-strong', className)}
     >
       <span className={cn('absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', checked && 'translate-x-4')} />
     </button>

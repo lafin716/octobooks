@@ -19,6 +19,7 @@ import { Button } from '../components/Button';
 import { IconButton } from '../components/Button';
 import { PanelFullToggle } from '../components/PanelFullToggle';
 import { cn } from '../lib/cn';
+import { useContentMax } from './SessionSettingsMenu';
 import { useBreakpoint } from '../app/useBreakpoint';
 import type { PanelVariant } from './ChatPanel';
 import { AnnotationPopover } from './AnnotationPopover';
@@ -60,6 +61,7 @@ export interface PagePanelProps {
  * 글을 골라 묻기·하이라이트·메모가 된다. 편집 모드가 따로 없이 늘 고칠 수 있고 쓰는 대로 저장된다 (ADR-086).
  */
 export function PagePanel({ sessionId, variant = 'main', headerActions, handleClassName, className }: PagePanelProps) {
+  const contentMax = useContentMax();
   const doc = useApp((s) => pageDoc(s.messages[sessionId]));
   const sessions = useApp((s) => s.sessions);
   const compact = variant !== 'main';
@@ -266,7 +268,7 @@ export function PagePanel({ sessionId, variant = 'main', headerActions, handleCl
           ai.busy === 'organize' && 'pointer-events-none animate-pulse opacity-60',
         )}
       >
-        <div className="relative mx-auto max-w-3xl">
+        <div className={cn('relative mx-auto', contentMax)}>
           {/* 편집기가 그리다 예외를 내도 화면 전체가 비지 않게 */}
           <ErrorBoundary key={sessionId} name="page-editor">
             <PageEditor

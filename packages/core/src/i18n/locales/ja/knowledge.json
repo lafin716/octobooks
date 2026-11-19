@@ -26,7 +26,7 @@
     "empty": "まだナレッジベースがありません。",
     "emptyHint": "資料をまとめて学習に連携すると、AIが回答時に参照します。",
     "create": "新しいナレッジベース",
-    "linkedBadge": "連携中",
+    "linkToggle": "この学習で使う",
     "link": "連携",
     "unlink": "連携解除",
     "count": "ファイル {count}件 · {size}",

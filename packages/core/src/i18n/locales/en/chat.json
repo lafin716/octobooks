@@ -253,6 +253,8 @@
     "renameTitle": "Rename",
     "summarized": "Summarized",
     "reorganize": "Reorganize session",
+    "settings": "Session settings",
+    "wideView": "Wide view",
     "original": "Original",
     "showNav": "Show navigation",
     "providerTitle": "This session's provider",

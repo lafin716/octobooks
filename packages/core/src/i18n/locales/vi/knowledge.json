@@ -26,7 +26,7 @@
     "empty": "Chưa có cơ sở tri thức nào.",
     "emptyHint": "Thu thập tài liệu và liên kết với học phần, AI sẽ tham khảo khi trả lời.",
     "create": "Cơ sở tri thức mới",
-    "linkedBadge": "Đã liên kết",
+    "linkToggle": "Dùng trong buổi học này",
     "link": "Liên kết",
     "unlink": "Hủy liên kết",
     "count": "{count} tệp · {size}",

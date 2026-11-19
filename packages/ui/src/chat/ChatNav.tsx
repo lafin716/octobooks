@@ -55,9 +55,9 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const branchToggleRef = useRef<HTMLButtonElement>(null);
-  // 모바일: 끌어서 옮기는 핸들 (좌·우 가장자리에 붙고 세로는 자유, ADR-056)
-  const dock = useUi((s) => s.navDock);
-  const setDock = useUi((s) => s.setNavDock);
+  // 끌어서 옮기는 핸들 (좌·우 가장자리에 붙고 세로는 자유). 모바일 ADR-056, PC는 따로 저장 ADR-146
+  const dock = useUi((s) => (mobile ? s.navDock : s.navDockPc));
+  const setDock = useUi((s) => (mobile ? s.setNavDock : s.setNavDockPc));
   const areaRef = useRef<HTMLDivElement>(null);
   const [tbSize, setTbSize] = useState({ w: 0, h: 0 });
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
@@ -220,12 +220,22 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
     const onDown = (e: PointerEvent) => {
       if (!toolbarRef.current?.contains(e.target as Node)) setHandleMenu(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setHandleMenu(false);
+      toolbarRef.current?.querySelector<HTMLElement>('[data-nav-handle]')?.focus();
+    };
     document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey, true);
+    };
   }, [handleMenu]);
 
-  // 모바일 툴바 크기 (붙을 위치 계산용)
-  const docked = mobile && !dock.hidden;
+  // 툴바 크기 (붙을 위치 계산용)
+  const docked = !dock.hidden;
   const showTurnsEarly = turns.length > 0 && (nav.overflow || turns.length >= 2);
   const visible = showTurnsEarly || linked > 0;
   useLayoutEffect(() => {
@@ -242,6 +252,8 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
     const area = areaRef.current?.getBoundingClientRect();
     const tb = toolbarRef.current?.getBoundingClientRect();
     if (!area || !tb) return;
+    // 마우스로 끌 때 본문 글자가 선택되지 않게 한다
+    if (e.pointerType === 'mouse') e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const ox = tb.left - area.left;
     const oy = tb.top - area.top;
@@ -292,6 +304,8 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
 
   const alt = isMac ? '⌥' : 'Alt+';
   const btnSize = mobile ? 'md' : 'sm';
+  // PC: 넓은 패널의 우측 레일(@3xl)과 겹치지 않게 오른쪽 여백을 넓힌다
+  const withRail = rail && !mobile && turns.length >= 2;
   const dockStyle: CSSProperties = drag
     ? { left: drag.x, top: drag.y }
     : {
@@ -304,31 +318,30 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
     <>
       {rail && !mobile && turns.length >= 2 && <TurnRail turns={turns} active={nav.active} onJump={jump} />}
 
-      {mobile && dock.hidden ? null : (
-      <div ref={areaRef} className={cn(mobile ? 'pointer-events-none absolute inset-2.5 z-10' : 'contents')}>
+      {dock.hidden ? null : (
+      <div
+        ref={areaRef}
+        data-nav-area=""
+        className={cn('pointer-events-none absolute inset-2.5 z-10', withRail && '@3xl:right-10', drag && 'select-none')}
+      >
       <div
         ref={toolbarRef}
         className={cn(
           'flex flex-col items-center rounded-xl border border-line bg-surface/95 p-0.5 shadow-pop backdrop-blur',
-          mobile
-            ? cn(
-                'pointer-events-auto absolute',
-                // 손을 뗀 뒤 가장자리로 달라붙는 동안만 애니메이션 (첫 배치·크기 변화는 즉시)
-                snapping && 'transition-[left,top] duration-300 ease-[cubic-bezier(0.25,1.3,0.5,1)] motion-reduce:transition-none',
-                drag && 'shadow-float',
-                !tbSize.w && 'invisible',
-              )
-            : 'absolute right-2.5 bottom-2.5 z-10',
+          'pointer-events-auto absolute',
+          // 손을 뗀 뒤 가장자리로 달라붙는 동안만 애니메이션 (첫 배치·크기 변화는 즉시)
+          snapping && 'transition-[left,top] duration-300 ease-[cubic-bezier(0.25,1.3,0.5,1)] motion-reduce:transition-none',
+          drag && 'shadow-float',
+          !tbSize.w && 'invisible',
         )}
-        style={mobile ? dockStyle : undefined}
+        style={dockStyle}
         onTransitionEnd={(e) => {
           if (e.target === e.currentTarget) setSnapping(false);
         }}
         role="toolbar"
         aria-label={t('chat.nav.navigateQuestions')}
-        data-nav-dock={mobile ? dock.side : undefined}
+        data-nav-dock={dock.side}
       >
-        {mobile && (
           <button
             type="button"
             aria-label={t('chat.nav.handle')}
@@ -339,12 +352,19 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
             onPointerMove={onHandleMove}
             onPointerUp={() => onHandleUp(false)}
             onPointerCancel={() => onHandleUp(true)}
-            className={cn('flex h-6 w-10 touch-none items-center justify-center rounded-lg text-muted active:bg-surface-2', drag ? 'cursor-grabbing' : 'cursor-grab')}
+            // 키보드(Enter·Space)로 누르면 메뉴를 연다. 포인터 탭은 onPointerUp에서 처리
+            onClick={(e) => {
+              if (e.detail === 0) setHandleMenu((v) => !v);
+            }}
+            className={cn(
+              'flex touch-none items-center justify-center rounded-lg text-muted active:bg-surface-2',
+              mobile ? 'h-6 w-10' : 'h-5 w-7 hover:bg-surface-2 hover:text-fg',
+              drag ? 'cursor-grabbing' : 'cursor-grab',
+            )}
           >
-            <GripHorizontal size={16} />
+            <GripHorizontal size={mobile ? 16 : 14} />
           </button>
-        )}
-        {mobile && handleMenu && (
+        {handleMenu && (
           <div
             role="menu"
             className={cn(
@@ -360,7 +380,7 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
                 setPanel(null);
                 setDock({ hidden: true });
               }}
-              className="flex h-10 items-center gap-2 rounded-lg px-3 text-[14px] text-fg hover:bg-surface-2"
+              className={cn('flex items-center gap-2 rounded-lg px-3 text-fg hover:bg-surface-2', mobile ? 'h-10 text-[14px]' : 'h-8 text-[13px]')}
             >
               <EyeOff size={15} className="text-muted" /> {t('chat.nav.hide')}
             </button>
@@ -422,7 +442,9 @@ export function ChatNav({ sessionId, scrollRef, keyboard = false, rail = true }:
           className={cn(
             'animate-pop-in absolute z-20 flex flex-col overflow-hidden rounded-xl border border-line bg-elev shadow-float',
             'inset-x-2 bottom-2 max-h-[72%]',
-            '@md:inset-x-auto @md:right-15 @md:bottom-2.5 @md:max-h-[min(72%,520px)] @md:w-[340px]',
+            '@md:inset-x-auto @md:bottom-2.5 @md:max-h-[min(72%,520px)] @md:w-[340px]',
+            // 툴바가 붙은 쪽 옆에서 연다 (왼쪽에 붙으면 화면 안쪽으로)
+            dock.side === 'left' ? '@md:left-15' : cn('@md:right-15', withRail && '@3xl:right-[90px]'),
           )}
         >
           {panel === 'toc' ? (
@@ -663,6 +685,7 @@ function TurnRail({ turns, active, onJump }: { turns: Turn[]; active: number; on
   return (
     <nav
       aria-label={t('chat.nav.questionRail')}
+      data-turn-rail=""
       className="absolute top-1/2 right-1 z-10 hidden max-h-[calc(100%-180px)] @3xl:flex -translate-y-1/2 flex-col items-end overflow-hidden py-1"
     >
       {turns.map((t) => {

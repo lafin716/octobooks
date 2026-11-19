@@ -4,9 +4,11 @@ import { AlertTriangle, Sparkles, X } from 'lucide-react';
 import { actions, useApp } from '../app/store';
 import { Button } from '../components/Button';
 import { cn } from '../lib/cn';
+import { useContentMax } from './SessionSettingsMenu';
 
 /** 요약 초안: 생성(스트리밍) → 편집 → 부모에 붙이기 */
 export function SummaryDraftPanel({ sessionId, compact }: { sessionId: ID; compact?: boolean }) {
+  const contentMax = useContentMax();
   const draft = useApp((s) => s.summaryDrafts[sessionId]);
   const parentTitle = useApp((s) => {
     const p = s.sessions[sessionId]?.parentId;
@@ -18,7 +20,7 @@ export function SummaryDraftPanel({ sessionId, compact }: { sessionId: ID; compa
 
   return (
     <div className={cn('shrink-0', compact ? 'px-2.5 pt-2' : 'px-3 pt-2 md:px-6')}>
-      <div className="animate-pop-in mx-auto max-w-3xl rounded-2xl border border-anchor-line/50 bg-surface p-3 shadow-pop">
+      <div className={cn('animate-pop-in mx-auto rounded-2xl border border-anchor-line/50 bg-surface p-3 shadow-pop', contentMax)}>
         <div className="mb-2 flex items-center gap-2 text-[13px]">
           <Sparkles size={15} className="text-anchor-line" />
           <span className="min-w-0 flex-1 truncate font-medium">

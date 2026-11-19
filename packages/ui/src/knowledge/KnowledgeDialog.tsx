@@ -23,6 +23,7 @@ import { Modal } from '../components/Modal';
 import { cn } from '../lib/cn';
 import { relativeTime } from '../lib/time';
 import { ipcErrorMessage } from './api';
+import { Toggle } from '../settings/controls';
 import { kbErrorGuide } from './kbErrors';
 import { KnowledgeCreate } from './KnowledgeCreate';
 import { filterBases, findDuplicates, formatSize, middleEllipsis, sortBases, validTime, type KbSort } from './kbModel';
@@ -577,14 +578,13 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
                   <li key={b.id} className={cn('flex items-stretch gap-1 rounded-lg', b.id === selected ? 'bg-accent-soft' : 'hover:bg-surface-2')}>
                     <button
                       type="button"
-                      aria-pressed={linked}
-                      disabled={busy}
-                      onClick={() => toggleLink(b.id)}
-                      className="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left disabled:opacity-60"
+                      aria-label={`${t('knowledge.list.open')}: ${b.name}`}
+                      aria-current={b.id === selected ? 'true' : undefined}
+                      onClick={() => select(b.id)}
+                      className="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left"
                     >
                       <span className="flex w-full min-w-0 items-center gap-2">
                         <span className={cn('min-w-0 flex-1 truncate text-[14px] font-medium', b.id === selected ? 'text-accent' : 'text-fg')}>{b.name}</span>
-                        {linked && <span className="shrink-0 rounded-full bg-accent px-1.5 py-px text-[11px] font-medium text-accent-fg">{t('knowledge.list.linkedBadge')}</span>}
                       </span>
                       {b.description && <span className="block w-full min-w-0 truncate text-[12px] text-fg-2">{b.description}</span>}
                       <span className="flex w-full min-w-0 flex-wrap items-center gap-1.5 text-[12px] text-fg-2">
@@ -597,9 +597,16 @@ export function KnowledgeDialog({ open, onClose, sessionId }: KnowledgeDialogPro
                         )}
                       </span>
                     </button>
-                    <IconButton size="sm" label={`${t('knowledge.list.open')}: ${b.name}`} onClick={() => select(b.id)} className="my-1.5 mr-1.5 self-center">
-                      <ChevronRight size={15} />
-                    </IconButton>
+                    {/* 연결 스위치 (Q-1): 행 본문은 상세 보기, 스위치만 연결을 바꾼다. 모바일은 터치 영역을 넓힌다 */}
+                    <span className="flex shrink-0 items-center pr-3 pl-1 max-md:pr-3.5">
+                      <Toggle
+                        checked={linked}
+                        disabled={busy}
+                        label={`${t('knowledge.list.linkToggle')}: ${b.name}`}
+                        onChange={() => toggleLink(b.id)}
+                        className="after:absolute after:-inset-2 after:content-[''] max-md:after:-inset-3"
+                      />
+                    </span>
                   </li>
                 );
               })}

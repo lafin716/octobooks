@@ -1,4 +1,4 @@
-/** 모바일 세션 내비게이션 핸들의 위치·숨김 (기기별, 모든 패널 공통, ADR-056) */
+/** 세션 내비게이션 핸들의 위치·숨김 (기기별, 모든 패널 공통. 모바일 ADR-056, PC ADR-146) */
 export interface NavDock {
   side: 'left' | 'right';
   /** 세로 위치: 0 = 맨 위, 1 = 맨 아래 (패널 높이 기준 비율) */
@@ -7,6 +7,8 @@ export interface NavDock {
 }
 
 export const NAV_DOCK_KEY = 'branch.navDock';
+/** PC(≥768px)는 화면 모양이 달라 모바일과 따로 저장한다 (ADR-146) */
+export const NAV_DOCK_PC_KEY = 'branch.navDock.desktop';
 export const DEFAULT_NAV_DOCK: NavDock = { side: 'right', y: 1, hidden: false };
 
 const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1);

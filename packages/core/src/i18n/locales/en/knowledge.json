@@ -26,7 +26,7 @@
     "empty": "No knowledge bases yet.",
     "emptyHint": "Collect material and link it to a study, and the AI will refer to it when answering.",
     "create": "New knowledge base",
-    "linkedBadge": "Linked",
+    "linkToggle": "Use in this study",
     "link": "Link",
     "unlink": "Unlink",
     "count": "{count} files · {size}",

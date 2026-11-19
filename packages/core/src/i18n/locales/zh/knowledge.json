@@ -26,7 +26,7 @@
     "empty": "还没有知识库。",
     "emptyHint": "收集资料并关联到学习后，AI 回答时会参考。",
     "create": "新建知识库",
-    "linkedBadge": "已关联",
+    "linkToggle": "在此学习中使用",
     "link": "关联",
     "unlink": "取消关联",
     "count": "{count} 个文件 · {size}",

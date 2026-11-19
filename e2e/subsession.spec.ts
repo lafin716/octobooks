@@ -38,7 +38,7 @@ test('하위 세션: 사이드바 + → 세션 → 부모 각주와 내비게이
   await page.screenshot({ path: `test-results/subsession-nav-${info.project.name}.png` });
 });
 
-/** 앵커 없는 하위 세션: 부모 원문이 없어도 요약 버튼 줄을 접는다 (접으면 헤더 아이콘으로) */
+/** 앵커 없는 하위 세션: 부모 원문이 없어도 요약 버튼 줄을 접는다 (접으면 세션 설정 메뉴에서, ADR-145) */
 test('빈 하위 세션: 요약 버튼 줄 접기·펼치기', async ({ page }, info) => {
   const mobile = info.project.name === 'mobile';
   await page.goto('/#scenario=home');
@@ -52,9 +52,22 @@ test('빈 하위 세션: 요약 버튼 줄 접기·펼치기', async ({ page }, 
   const header = page.locator('header').filter({ hasText: '새 학습' }).first();
   await expect(header.getByRole('button', { name: '부모에 요약 붙이기' })).toHaveText(/부모에 요약 붙이기/);
   await header.getByRole('button', { name: '요약 버튼 접기' }).click();
-  // 줄은 사라지고 헤더 아이콘 버튼만 남는다
-  await expect(header.getByRole('button', { name: '부모에 요약 붙이기' })).not.toHaveText(/부모에 요약 붙이기/);
+  // 줄은 사라지고 요약은 세션 설정 메뉴에 남는다
+  await expect(header.getByRole('button', { name: '부모에 요약 붙이기' })).toHaveCount(0);
+  await header.getByRole('button', { name: '세션 설정', exact: true }).click();
+  const menu = header.getByRole('menu', { name: '세션 설정' });
+  await expect(menu.getByRole('menuitem', { name: '부모에 요약 붙이기' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: '세션 재정리' })).toHaveCount(0);
+  // 넓게 보기: 기기별로 저장되고 본문 너비가 넓어진다
+  const wide = menu.getByRole('menuitemcheckbox', { name: '넓게 보기' });
+  await expect(wide).toHaveAttribute('aria-checked', 'false');
+  await wide.click();
+  await expect(wide).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => localStorage.getItem('branch.wideView'))).toBe('1');
   await page.screenshot({ path: `test-results/subsession-fold-${info.project.name}.png` });
+  await wide.click();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
   await header.getByRole('button', { name: '요약 버튼 펼치기' }).click();
   await expect(header.getByRole('button', { name: '부모에 요약 붙이기' })).toHaveText(/부모에 요약 붙이기/);
 });

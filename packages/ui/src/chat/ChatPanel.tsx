@@ -3,6 +3,7 @@ import type { ID } from '@branch/core';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useApp } from '../app/store';
 import { cn } from '../lib/cn';
+import { useContentMax } from './SessionSettingsMenu';
 import { ChatNav } from './ChatNav';
 import { Composer } from './Composer';
 import { EmptyChat } from './EmptyChat';
@@ -31,6 +32,7 @@ export function ChatPanel(props: ChatPanelProps) {
 }
 
 function ConversationPanel({ sessionId, variant = 'main', headerActions, handleClassName, className }: ChatPanelProps) {
+  const contentMax = useContentMax();
   const exists = useApp((s) => !!s.sessions[sessionId]);
   const count = useApp((s) => s.messages[sessionId]?.length ?? 0);
   const lastLen = useApp((s) => {
@@ -86,7 +88,7 @@ function ConversationPanel({ sessionId, variant = 'main', headerActions, handleC
         }}
         className={cn('scroll-thin h-full overflow-y-auto overscroll-contain', compact ? 'px-3.5 py-4' : 'px-4 py-6 md:px-6')}
         >
-          <div className="mx-auto max-w-3xl">
+          <div className={cn('mx-auto', contentMax)}>
             {count === 0 ? <EmptyChat sessionId={sessionId} compact={compact} /> : <MessageList sessionId={sessionId} />}
           </div>
         </div>

@@ -49,7 +49,9 @@ test('세션 재정리: 하나의 질문·답변으로 바뀌고 하위 세션�
   await expect(main.locator('[data-turn]').getByText(THIRD, { exact: true })).toBeVisible();
   expect(await main.locator('[data-turn]').count()).toBeGreaterThan(1);
 
-  await main.getByRole('button', { name: '세션 재정리' }).click();
+  // 세션 재정리는 제목 오른쪽 세션 설정 메뉴에 있다 (ADR-145)
+  await main.getByRole('button', { name: '세션 설정', exact: true }).click();
+  await page.getByRole('menu', { name: '세션 설정' }).getByRole('menuitem', { name: '세션 재정리' }).click();
   const confirmDialog = page.getByRole('alertdialog');
   await expect(confirmDialog).toContainText('각주로 남아요');
   await confirmDialog.getByRole('button', { name: '재정리' }).click();

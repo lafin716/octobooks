@@ -231,7 +231,11 @@ test('가지 표시·이 페이지의 가지 목록·가지의 부모 원문 접
   await expect(page.locator('[data-quote]')).toHaveCount(1);
   await page.getByRole('button', { name: '부모 원문 접기' }).click();
   await expect(page.locator('[data-quote]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '부모에 요약 붙이기' })).toBeVisible();
+  // 접으면 요약 버튼 줄도 숨고, 요약은 세션 설정 메뉴에서 한다 (ADR-145)
+  await expect(page.getByRole('button', { name: '부모에 요약 붙이기' })).toHaveCount(0);
+  await page.getByRole('button', { name: '부모 원문 펼치기' }).locator('xpath=..').getByRole('button', { name: '세션 설정', exact: true }).click();
+  await expect(page.getByRole('menu', { name: '세션 설정' }).getByRole('menuitem', { name: '부모에 요약 붙이기' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '부모 원문 펼치기' }).click();
   await expect(page.locator('[data-quote]')).toHaveCount(1);
   await closeBranch();
