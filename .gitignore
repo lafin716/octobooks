@@ -10,3 +10,5 @@ test-results
 release
 .vitest
 apps/desktop/vendor
+.env.local
+*.local

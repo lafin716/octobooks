@@ -19,6 +19,7 @@ import { startNotificationService } from './notifications/service';
 import { SessionWindowApp } from './window/SessionWindowApp';
 import { PresentAudienceApp } from './window/PresentAudienceApp';
 import { startUnreadTracker } from './session/unread';
+import { WithRhymehub } from './rhymehub';
 import './styles.css';
 
 async function boot() {
@@ -60,7 +61,9 @@ async function boot() {
         ) : sessionWindowId ? (
           <SessionWindowApp />
         ) : (
-          <App />
+          <WithRhymehub>
+            <App />
+          </WithRhymehub>
         )}
       </ErrorBoundary>
     </StrictMode>,

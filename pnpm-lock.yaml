@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@rhymehub/sdk': file:vendor/rhymehub/rhymehub-sdk-0.1.0.tgz
+  '@rhymehub/shared': file:vendor/rhymehub/rhymehub-shared-0.1.0.tgz
+
 importers:
 
   .:
@@ -286,6 +290,9 @@ importers:
       '@lezer/markdown':
         specifier: ^1.8.1
         version: 1.8.1
+      '@rhymehub/react':
+        specifier: file:../../vendor/rhymehub/rhymehub-react-0.1.0.tgz
+        version: file:vendor/rhymehub/rhymehub-react-0.1.0.tgz(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@xyflow/react':
         specifier: ^12.12.0
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -1010,6 +1017,21 @@ packages:
     resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@rhymehub/react@file:vendor/rhymehub/rhymehub-react-0.1.0.tgz':
+    resolution: {integrity: sha512-GcmlZ34murwAyfCqy2YoykaLRbtV2IYgxHJvhgDygHAO1vnFQqM4pCGIrk31wYYE7rw+M0AeCGxdvAUu1pE3UA==, tarball: file:vendor/rhymehub/rhymehub-react-0.1.0.tgz}
+    version: 0.1.0
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+
+  '@rhymehub/sdk@file:vendor/rhymehub/rhymehub-sdk-0.1.0.tgz':
+    resolution: {integrity: sha512-021BBSmBkzF0NnGUJv6lj2y0Coo8ILyKSvU52Wbfc+lenmU0AOk9tEfkxqdQoAouxkNUryZ7dTP0v3EJj3r+Nw==, tarball: file:vendor/rhymehub/rhymehub-sdk-0.1.0.tgz}
+    version: 0.1.0
+
+  '@rhymehub/shared@file:vendor/rhymehub/rhymehub-shared-0.1.0.tgz':
+    resolution: {integrity: sha512-+9mVqT18tUMXoDSeY1Bx35xBUnLosHY+iXLNS2uS5GT4qeJwXVDjRqUYNgzNua5xlZw4ieRbxKObZUkBy98EqQ==, tarball: file:vendor/rhymehub/rhymehub-shared-0.1.0.tgz}
+    version: 0.1.0
 
   '@rolldown/binding-android-arm-eabi@1.2.13':
     resolution: {integrity: sha512-Vu/NICrgdRvUOeaJZIyB2FP63s6fO/4ud5l8dXmxDx9yDyn+mN0y+gsvsVviSli+T361Aqo0h46EuMoobrwawA==}
@@ -4499,6 +4521,18 @@ snapshots:
   '@playwright/test@1.64.0':
     dependencies:
       playwright: 1.64.0
+
+  '@rhymehub/react@file:vendor/rhymehub/rhymehub-react-0.1.0.tgz(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      '@rhymehub/sdk': file:vendor/rhymehub/rhymehub-sdk-0.1.0.tgz
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+
+  '@rhymehub/sdk@file:vendor/rhymehub/rhymehub-sdk-0.1.0.tgz':
+    dependencies:
+      '@rhymehub/shared': file:vendor/rhymehub/rhymehub-shared-0.1.0.tgz
+
+  '@rhymehub/shared@file:vendor/rhymehub/rhymehub-shared-0.1.0.tgz': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.13':
     optional: true
