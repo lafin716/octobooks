@@ -23,6 +23,7 @@ import { RemoteSettings } from './RemoteSettings';
 import { SelectionTriggerField } from './SelectionTriggerField';
 import { VoiceSettings } from './VoiceSettings';
 import { UpdateSettings } from './UpdateSettings';
+import { FeedbackSettings } from '../feedback/FeedbackSettings';
 import { providerKind, providerLabel, STATUS_LABEL, statusTone } from '../lib/connection';
 
 type Tab = 'connections' | 'backup' | 'voice' | 'appearance' | 'general';
@@ -173,6 +174,7 @@ function GeneralTab() {
       <LanguageField />
       {desktop?.updater && <UpdateSettings />}
       <NotificationSettings />
+      <FeedbackSettings />
       <Field label={t('settings.general.defaultProvider')} hint={t('settings.general.defaultProviderHint')}>
         <select
           value={settings.defaultProviderId}

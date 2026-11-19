@@ -1,12 +1,17 @@
 # Project Progress
 
-Last Updated: 2026-11-09
+Last Updated: 2026-11-20
 Current Stage: **3단계 — 전체 개발 완료**
 Overall Progress: 1·2단계 완료(2026-10-09 컨펌), 3단계 Phase 1~7 전체 완료 + 개선 IMP-01~09 완료 (남은 항목은 사람 조치 — docs/BLOCKERS.md)
 
 > 재개 방법: 루트 `CLAUDE.md` → 이 파일 → `docs/02-ARCHITECTURE.md` → `git log`/`git status` 순으로 읽고,
 > 아래 체크리스트에서 첫 번째 미완료 항목부터 이어서 진행한다.
 > 게이트 통과: 2026-10-09 사용자 "컨펌". 3단계는 질문 없이 진행(결정 → DECISIONS, 사람 조치 → BLOCKERS).
+
+## rhymehub 피드백 키 앱 내 입력 (2026-11-20, ADR-147)
+- [x] 빌드 env·CI secrets(`VITE_RHYMEHUB_*`) 제거, 키 입력 창에서 rhk_ 키·서버 주소 입력 → 서버 확인 후 기기별 저장
+- [x] PC 상단 바 피드백 버튼, 설정 > 일반 > 피드백(상태·키 바꾸기·연결 해제), 문구 5개 언어
+- [x] 검증: typecheck·lint·test, 데스크톱 재빌드·실행
 
 ## 지식베이스 기본 전체 사용·업로드 자동 설명·관련 질문에만 탐색 (2026-11-11, ADR-141~144)
 - [x] 기본 전체 사용: 목록을 정하지 않은 학습은 PC의 지식베이스를 모두 쓴다(최근 16개). 팝업에 "모두 사용" 안내·되돌리기 (ADR-141)

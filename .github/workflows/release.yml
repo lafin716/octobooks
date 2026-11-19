@@ -68,10 +68,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # rhymehub 피드백 위젯 (secrets가 없으면 위젯 없이 빌드된다)
-          VITE_RHYMEHUB_PROJECT: ${{ secrets.VITE_RHYMEHUB_PROJECT }}
-          VITE_RHYMEHUB_KEY: ${{ secrets.VITE_RHYMEHUB_KEY }}
-          VITE_RHYMEHUB_PUBLIC_URL: ${{ secrets.VITE_RHYMEHUB_PUBLIC_URL }}
       # latest*.yml: 자동 업데이트 메타데이터(sha512 포함), *.blockmap: 차등 다운로드 (ADR-118)
       - uses: actions/upload-artifact@v4
         with:
@@ -107,9 +103,6 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           RHYMEBOOK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          VITE_RHYMEHUB_PROJECT: ${{ secrets.VITE_RHYMEHUB_PROJECT }}
-          VITE_RHYMEHUB_KEY: ${{ secrets.VITE_RHYMEHUB_KEY }}
-          VITE_RHYMEHUB_PUBLIC_URL: ${{ secrets.VITE_RHYMEHUB_PUBLIC_URL }}
         run: |
           mkdir -p out
           if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$RHYMEBOOK_KEYSTORE_PASSWORD" ]]; then
